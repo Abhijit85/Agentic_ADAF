@@ -1,4 +1,4 @@
-# Adaptive Chain-of-Table Reasoning with Open-Source LLMs
+# Adaptive Chain-of-Table Reasoning with OpenAI LLMs
 
 ## Directory structure:
 
@@ -27,7 +27,7 @@ adaptive-table-qa/
 
 # Adaptive Chain-of-Table QA
 ```
-This repository implements a multi-agent reasoning framework to perform multi-hop question answering over tables (and optionally text) using open-source LLMs like LLaMA and Mistral.
+This repository implements a multi-agent reasoning framework to perform multi-hop question answering over tables (and optionally text) using OpenAI LLMs like `gpt-3.5-turbo`.
 ```
 ## Features
 ```
