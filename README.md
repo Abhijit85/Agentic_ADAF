@@ -1,4 +1,4 @@
-# Adaptive Chain-of-Table Reasoning with Open-Source LLMs
+# Adaptive Chain-of-Table Reasoning with OpenAI LLMs
 
 ## Directory structure:
 
@@ -27,7 +27,7 @@ adaptive-table-qa/
 
 # Adaptive Chain-of-Table QA
 ```
-This repository implements a multi-agent reasoning framework to perform multi-hop question answering over tables (and optionally text) using open-source LLMs like LLaMA and Mistral.
+This repository implements a multi-agent reasoning framework to perform multi-hop question answering over tables (and optionally text) using OpenAI LLMs like `gpt-3.5-turbo`.
 ```
 ## Features
 ```
@@ -46,6 +46,17 @@ pip install -r requirements.txt
 Clone the official inference repository and install its Python package:
 ```bash
 scripts/setup_mistral_inference.sh
+```
+
+### Use OpenAI API
+Install the `openai` package (already listed in `requirements.txt`) and set
+your API key:
+```bash
+export OPENAI_API_KEY=<your-key>
+```
+Run the pipeline with any supported OpenAI model, e.g. `gpt-3.5-turbo`:
+```bash
+python main.py --dataset tatqa --llm gpt-3.5-turbo
 ```
 
 
