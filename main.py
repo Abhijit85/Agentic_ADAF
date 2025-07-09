@@ -13,7 +13,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="tatqa")
-    parser.add_argument("--llm", type=str, default="mistral-7b")
+    parser.add_argument("--llm", type=str, default="gpt-3.5-turbo")
     args = parser.parse_args()
 
     data = load_benchmark(args.dataset)

@@ -42,12 +42,6 @@ This repository implements a multi-agent reasoning framework to perform multi-ho
 pip install -r requirements.txt
 ```
 
-### Prepare Mistral model
-Clone the official inference repository and install its Python package:
-```bash
-scripts/setup_mistral_inference.sh
-```
-
 ### Use OpenAI API
 Install the `openai` package (already listed in `requirements.txt`) and set
 your API key:
@@ -62,15 +56,15 @@ python main.py --dataset tatqa --llm gpt-3.5-turbo
 
 ## Run Inference
 ```bash
-python main.py --dataset tatqa --llm mistral-7b
+python main.py --dataset tatqa --llm gpt-3.5-turbo
 ```
 
-## Fine-tune
+## Fine-tune (optional)
 ```bash
 python lora_finetune.py --model mistralai/Mistral-7B-v0.1
 ```
 
-## Evaluate
+## Evaluate (optional)
 ```bash
 python evaluate.py lora_mistral --split dev
 ```
