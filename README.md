@@ -1,5 +1,5 @@
 # Adaptive Chain-of-Table Reasoning with OpenAI LLMs
-![Alt text](Decentralized_Agent_V2.pdf)
+(Decentralized_Agent_V2.pdf)
 ## Directory structure:
 
 ```
