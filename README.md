@@ -37,6 +37,19 @@ This repository implements a multi-agent reasoning framework to perform multi-ho
 - Finetuning with LoRA
 - Evaluation on FinQA, TabFact, TAT-QA, WikiTQ, FeTaQA
 ```
+
+## Architecture Overview
+
+The system follows a planner-free, log-mediated question answering workflow in which
+multiple specialist agents collaborate through a shared append-only log. Each agent
+reads prior entries, writes new observations, and hands off intermediate results to
+other agents for synthesis and verification. A high-level coordinator ensures turn
+taking while a summarizing verifier validates the final answer before it is returned
+to the user.
+
+For a detailed breakdown of the components and their interactions, see the
+[architecture poster](docs/architecture_poster.md).
+
 ## Setup
 ```bash
 pip install -r requirements.txt
