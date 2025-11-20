@@ -48,12 +48,37 @@ taking while a summarizing verifier validates the final answer before it is retu
 to the user.
 
 For a detailed breakdown of the components and their interactions, see the
-[architecture poster](docs/architecture_poster.md).
+[architecture poster](docs/architecture_poster.md). The concrete log schema,
+message types, and agent contracts live in the new
+[shared log schema reference](docs/shared_log_schema.md).
+
+## Datasets
+
+- `tatqa` – Original Tabular And Text QA benchmark (default).
+- `crtqa` / `crt-qa` – Compliance Readiness Tables QA. Compact dataset with curated CRT adoption tables and contextual passages.
+- `multi_hop` / `multi-hop` – Synthetic 5–8 step operator chains for stressing arithmetic/multi-hop coordination.
+- `finqa`, `mmqa_full`, `mmqa_text_table`, `wikitq`, `fetaqa` – drop JSON/JSONL splits under `data/<DatasetName>/<split>.json`. The loader ingests flat lists of QA samples, so you can preprocess HuggingFace exports or your own converters without changing code.
+- For quick smoke tests, use `--limit 20` (or set `sample_limit` in `configs/planner_benchmarks.yaml`) to cap runs at twenty examples per dataset.
+- For the FeTaQA factuality experiment (QAGS/BERTScore/Log-Groundedness + 100-example human eval), follow the playbook in [`docs/fetaqa_faithfulness.md`](docs/fetaqa_faithfulness.md). That note also contains the new table to insert after Table 2 in the paper.
+
+Choose a dataset via `--dataset` when running `main.py`, `scripts/run_dealog.py`, or the benchmarking harness.
 
 ## Setup
 ```bash
 pip install -r requirements.txt
 ```
+
+### Configure environment variables
+The project automatically loads `.env` via [`python-dotenv`](https://github.com/theskumar/python-dotenv).
+Fill in the sample `.env` with your own credentials:
+
+- `OPENAI_API_KEY`, `MISTRAL_API_TOKEN`
+- `HF_API_TOKEN` (used for gated HuggingFace downloads)
+- `OPENROUTER_API_KEY` (plus optional `OPENROUTER_BASE_URL`, `OPENROUTER_SITE_URL`, `OPENROUTER_APP_NAME`)
+- Model choices such as `PRIMARY_MODEL_NAME`, `VISUAL_MODEL_NAME`, and `DEALOG_SUMMARIZER_MODEL`
+- Visual stack:
+  - `VISUAL_CAPTION_MODEL` / `VISUAL_CAPTION_MODEL_PATH` (local BLIP‑2 directory)
+  - `VISUAL_OCR_ENGINE` / `VISUAL_OCR_MODEL_DIR` (PaddleOCR cache folder)
 
 ### Prepare Mistral model
 Clone the official inference repository and install its Python package:
@@ -67,6 +92,18 @@ your API key:
 ```bash
 export OPENAI_API_KEY=<your-key>
 ```
+
+### Use OpenRouter API
+If you prefer routing calls through OpenRouter, export your key (or set it in
+`.env`):
+```bash
+export OPENROUTER_API_KEY=<your-openrouter-key>
+```
+You can also override `OPENROUTER_BASE_URL` when hosting a proxy.
+DeALoG’s summarizer/verifier pipeline relies on this credential (or `OPENAI_API_KEY`)
+to call the backing LLM; without it the agent falls back to a heuristic that may be
+less accurate.
+
 Run the pipeline with any supported OpenAI model, e.g. `gpt-3.5-turbo`:
 ```bash
 python main.py --dataset tatqa --llm gpt-3.5-turbo
@@ -75,7 +112,25 @@ python main.py --dataset tatqa --llm gpt-3.5-turbo
 
 ## Run Inference
 ```bash
-python main.py --dataset tatqa --llm mistral-7b
+python main.py --dataset tatqa --llm mistral-7b --visual-caption-model Salesforce/blip2-flan-t5-xl
+# CRT-QA sample
+python main.py --dataset crtqa --llm ${PRIMARY_MODEL_NAME} --visual-ocr-engine PaddleOCR
+# Synthetic multi-hop split
+python main.py --dataset multi_hop --llm mistral-7b --visual-caption-path ./models/blip2_flan_t5_xl
+# Limit to 20 FinQA examples
+python main.py --dataset finqa --llm ${PRIMARY_MODEL_NAME} --limit 20
+```
+
+To collect richer metrics (accuracy + per-example traces) for DeALoG and plug them
+into the benchmarking harness:
+```bash
+python scripts/run_dealog.py \
+  --dataset tatqa --split dev --llm ${PRIMARY_MODEL_NAME} \
+  --results-file /tmp/dealog_tatqa.json \
+  --visual-caption-model ${VISUAL_CAPTION_MODEL} \
+  --visual-caption-path ${VISUAL_CAPTION_MODEL_PATH} \
+  --visual-ocr-engine ${VISUAL_OCR_ENGINE} \
+  --visual-ocr-model-dir ${VISUAL_OCR_MODEL_DIR}
 ```
 
 ## Fine-tune
@@ -87,3 +142,43 @@ python lora_finetune.py --model mistralai/Mistral-7B-v0.1
 ```bash
 python evaluate.py lora_mistral --split dev
 ```
+
+## Benchmark Planners
+
+Use `configs/planner_benchmarks.yaml` to describe dataset splits and planner baselines
+(CoT, ReAct, ReWOO, planner-based agent, and DeALoG across LLaMA‑3 8B/70B, Mistral 7B/24B,
+and Qwen‑3 Medium/Large). Run the matrix—optionally in parallel—via:
+
+```bash
+# Preview commands
+python scripts/run_benchmark_matrix.py --dry-run
+
+# Execute with max concurrency (defaults to CPU count)
+python scripts/run_benchmark_matrix.py --max-workers 6
+```
+
+Each YAML entry can override command templates, decoding hyper-parameters, models, and
+environment variables so you can plug in custom planner implementations. The runner writes
+logs to `benchmarks/results/<timestamp>/logs` and expects every command to emit a JSON
+metrics file (path provided through `{metrics_path}` and the `BENCHMARK_METRICS_FILE`
+environment variable). Populate the JSON with fields like `accuracy`, `per_example`,
+`calls`, `tokens`, `latency_sec`, and `api_cost` so downstream analysis can mirror the
+paper’s reporting.
+
+After the runs finish, compute accuracy deltas, bootstrap 95 % CIs, and paired permutation
+tests relative to the matched backbone’s CoT baseline:
+
+```bash
+python scripts/analyze_benchmarks.py benchmarks/results/<run>/results.jsonl --baseline cot
+```
+
+The script emits a Markdown table summarising dataset/backbone/system values—including the
+latency and cost columns shown in Table 6 of the paper.
+
+Reference drivers for the matrix live in `baselines/run_{cot,react,rewoo,planner}.py`
+and `scripts/run_dealog.py`; feel free to swap them out with your full implementations
+once you are ready to benchmark real LLM calls.
+### Visual caption & OCR models
+BLIP-2 FLAN-T5-XL weights are mirrored under `models/blip2_flan_t5_xl/`. PaddleOCR
+assets (detector/recognizer/classifier) live under `models/paddleocr_cache/`.
+Update `.env` if you relocate these folders or switch to different checkpoints.

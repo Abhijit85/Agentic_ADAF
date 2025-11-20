@@ -194,6 +194,12 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# Local datasets / large artifacts
+data/MMQA/full/train.json
+data/MMQA/full/test.json
+data/MMQA/full/*.jsonl
+/tmp/multimodalqa/
+
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
@@ -206,3 +212,23 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .DS_Store
+data/*
+!data/FinQA/
+data/FinQA/*
+!data/FinQA/dev.json
+!data/MMQA/
+data/MMQA/*
+!data/MMQA/full/
+data/MMQA/full/*
+!data/MMQA/full/dev.json
+!data/MMQA_text_table/
+data/MMQA_text_table/*
+!data/MMQA_text_table/dev.json
+!data/WikiTQ/
+data/WikiTQ/*
+!data/WikiTQ/dev.json
+!data/FeTaQA/
+data/FeTaQA/*
+!data/FeTaQA/dev.json
+benchmarks/results/
+models/

@@ -34,9 +34,18 @@ class LogEntry:
 class SharedLog:
     """An append-only store that tracks pending coordination needs."""
 
-    def __init__(self) -> None:
+    def __init__(self, entry_transform=None) -> None:
+        """
+        Parameters
+        ----------
+        entry_transform:
+            Optional callable ``f(LogEntry) -> LogEntry`` applied before each entry is
+            stored. Useful for instrumentation (e.g., fault injection) without touching
+            agent code paths.
+        """
         self._entries: List[LogEntry] = []
         self._pending: Counter[str] = Counter()
+        self._transform = entry_transform
 
     def append(
         self,
@@ -58,6 +67,8 @@ class SharedLog:
             needs=list(needs or []),
             resolves=list(resolves or []),
         )
+        if self._transform:
+            entry = self._transform(entry)
         self._entries.append(entry)
 
         for need in entry.needs:
@@ -102,4 +113,3 @@ class SharedLog:
 
     def __iter__(self) -> Iterator[LogEntry]:  # pragma: no cover - simple delegation
         return iter(self._entries)
-
