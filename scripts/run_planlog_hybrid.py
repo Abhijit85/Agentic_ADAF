@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -46,6 +47,8 @@ def run_hybrid(
     split: str,
     limit: Optional[int],
     llm: Optional[str],
+    summarizer_llm: Optional[str],
+    summarizer_max_tokens: int,
     visual_caption_model: Optional[str],
     visual_caption_path: Optional[str],
     visual_ocr_engine: Optional[str],
@@ -62,6 +65,8 @@ def run_hybrid(
 
     orchestrator = AdaptiveOrchestrator(
         model_name=llm,
+        summarizer_model_name=summarizer_llm,
+        summarizer_max_tokens=summarizer_max_tokens,
         visual_caption_model=visual_caption_model,
         visual_caption_model_path=visual_caption_path,
         visual_ocr_engine=visual_ocr_engine,
@@ -124,6 +129,17 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--split", default="dev")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--llm", required=True)
+    ap.add_argument(
+        "--summarizer-llm",
+        default=os.getenv("DEALOG_SUMMARIZER_MODEL"),
+        help="Model used by summarizer/verifier client (defaults to DEALOG_SUMMARIZER_MODEL).",
+    )
+    ap.add_argument(
+        "--summarizer-max-tokens",
+        type=int,
+        default=int(os.getenv("DEALOG_SUMMARIZER_MAX_TOKENS", "256")),
+        help="Max completion tokens for summarizer completions.",
+    )
     ap.add_argument("--visual-caption-model", default=None)
     ap.add_argument("--visual-caption-path", default=None)
     ap.add_argument("--visual-ocr-engine", default=None)
@@ -142,6 +158,8 @@ def main() -> None:
         split=args.split,
         limit=args.limit,
         llm=args.llm,
+        summarizer_llm=args.summarizer_llm,
+        summarizer_max_tokens=args.summarizer_max_tokens,
         visual_caption_model=args.visual_caption_model,
         visual_caption_path=args.visual_caption_path,
         visual_ocr_engine=args.visual_ocr_engine,

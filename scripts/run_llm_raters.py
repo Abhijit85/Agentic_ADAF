@@ -20,8 +20,8 @@ except Exception:
     pass
 
 OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL")
-OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME")
+OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL") or os.environ.get("OPENROUTER_SITE")
+OPENROUTER_APP_NAME = os.environ.get("OPENROUTER_APP_NAME") or os.environ.get("OPENROUTER_SITE_NAME")
 
 SYSTEM_PROMPT = (
     "You are a meticulous fact-checker. For each example, read the question, "

@@ -153,6 +153,7 @@ def build_jobs(config: Dict[str, Any], logs_dir: Path, metrics_dir: Path) -> Lis
                     "backbone_label": backbone.get("label", backbone["name"]),
                     "model": backbone.get("model", ""),
                     "decoding_json": json.dumps(backbone.get("decoding", {})),
+                    "summarizer_max_tokens": (backbone.get("decoding", {}) or {}).get("max_new_tokens", 256),
                     "backbone_extra_args": backbone.get("extra_args", ""),
                     "system": system["name"],
                     "system_label": system.get("label", system["name"]),

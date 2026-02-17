@@ -178,6 +178,30 @@ latency and cost columns shown in Table 6 of the paper.
 Reference drivers for the matrix live in `baselines/run_{cot,react,rewoo,planner}.py`
 and `scripts/run_dealog.py`; feel free to swap them out with your full implementations
 once you are ready to benchmark real LLM calls.
+
+### Long-horizon Table-6 style run (+8192-token ablation)
+
+Use the dedicated runner to reproduce the CRT-QA / Multi-Hop rows and add an
+`8192` summarizer-token ablation column:
+
+```bash
+python scripts/run_table6_long_horizon.py \
+  --llm ${PRIMARY_MODEL_NAME} \
+  --summarizer-llm ${DEALOG_SUMMARIZER_MODEL} \
+  --base-max-tokens 256 \
+  --ablation-max-tokens 8192 \
+  --max-rounds 10 \
+  --output-dir benchmarks/results/table6_long_horizon
+```
+
+It writes:
+- `benchmarks/results/table6_long_horizon/table6_long_horizon.md`
+- `benchmarks/results/table6_long_horizon/table6_long_horizon.json`
+
+Required datasets for all rows:
+- `data/CRTQA/crtqa_{train,dev,test}.json`
+- `data/multi_hop_synthetic/multi_hop_{train,dev,test}.json`
+
 ### Visual caption & OCR models
 BLIP-2 FLAN-T5-XL weights are mirrored under `models/blip2_flan_t5_xl/`. PaddleOCR
 assets (detector/recognizer/classifier) live under `models/paddleocr_cache/`.

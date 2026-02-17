@@ -198,6 +198,7 @@ systems:
       --dataset {dataset_arg}
       --split {split}
       --llm {model}
+      --summarizer-max-tokens {summarizer_max_tokens}
       --results-file {metrics_path}
       --visual-caption-model {visual_caption_model}
       --visual-caption-path {visual_caption_model_path}
@@ -213,6 +214,7 @@ systems:
       --dataset {dataset_arg}
       --split {split}
       --llm {model}
+      --summarizer-max-tokens {summarizer_max_tokens}
       --results-file {metrics_path}
       --visual-caption-model {visual_caption_model}
       --visual-caption-path {visual_caption_model_path}

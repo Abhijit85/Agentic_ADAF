@@ -8,6 +8,7 @@ from typing import Any, Dict
 from agents.coordinator import AdaptiveOrchestrator
 from utils.data_loader import load_benchmark
 from utils.settings import (
+    get_dealog_summarizer_model,
     get_primary_model,
     get_visual_caption_model,
     get_visual_caption_model_path,
@@ -32,6 +33,24 @@ def main() -> None:
     parser.add_argument("--dataset", type=str, default="tatqa")
     parser.add_argument("--split", type=str, default="dev")
     parser.add_argument("--llm", type=str, default=get_primary_model())
+    parser.add_argument(
+        "--summarizer-llm",
+        type=str,
+        default=get_dealog_summarizer_model(),
+        help="Model used by the summarizer/verifier LLM client.",
+    )
+    parser.add_argument(
+        "--summarizer-temperature",
+        type=float,
+        default=0.2,
+        help="Temperature used for summarizer completions.",
+    )
+    parser.add_argument(
+        "--summarizer-max-tokens",
+        type=int,
+        default=256,
+        help="Max completion tokens used by the summarizer.",
+    )
     parser.add_argument(
         "--visual-llm",
         type=str,
@@ -75,6 +94,9 @@ def main() -> None:
     data = load_benchmark(args.dataset, split=args.split, limit=args.limit)
     orchestrator = AdaptiveOrchestrator(
         model_name=args.llm,
+        summarizer_model_name=args.summarizer_llm,
+        summarizer_temperature=args.summarizer_temperature,
+        summarizer_max_tokens=args.summarizer_max_tokens,
         visual_model_name=args.visual_llm or args.visual_caption_model,
         visual_caption_model=args.visual_caption_model or args.visual_llm,
         visual_caption_model_path=args.visual_caption_path,

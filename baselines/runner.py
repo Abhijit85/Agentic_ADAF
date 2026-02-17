@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
 from utils.data_loader import load_benchmark
+from utils.llm_client import LLMClient
 
 
 DEFAULT_SYSTEM_STATS: Dict[str, Dict[str, Any]] = {
@@ -26,27 +27,49 @@ def _normalise_text(value: Any) -> str:
     return str(value).strip().lower()
 
 
-def _simulate_prediction(strategy: str, sample: Dict[str, Any], index: int) -> str:
-    answer = sample.get("answer")
-    if answer is None:
+def _build_prompt(strategy: str, sample: Dict[str, Any]) -> str:
+    question = sample.get("question", "")
+    table = sample.get("table") or []
+    paragraphs = sample.get("paragraphs") or sample.get("context") or []
+    if isinstance(paragraphs, list):
+        context_text = "\n".join(str(p) for p in paragraphs[:5])
+    else:
+        context_text = str(paragraphs)
+    table_rows = []
+    if isinstance(table, list):
+        for row in table[:20]:
+            if isinstance(row, list):
+                table_rows.append(" | ".join(map(str, row)))
+            else:
+                table_rows.append(str(row))
+    table_text = "\n".join(table_rows) if table_rows else "(no table)"
+
+    style = {
+        "cot": "Use concise step-by-step reasoning.",
+        "react": "Use Thought/Action/Observation style reasoning.",
+        "rewoo": "Use plan and tool-style decomposition before the final answer.",
+        "planner": "First produce a short plan, then solve.",
+        "planner_replan": "Plan, solve, re-check, then provide final answer.",
+    }.get(strategy, "Solve carefully.")
+    return (
+        "You are a table QA assistant.\n"
+        f"{style}\n"
+        "Return your final answer on a separate line as:\n"
+        "Answer: <final answer>\n\n"
+        f"Question: {question}\n"
+        f"Table:\n{table_text}\n"
+        f"Context:\n{context_text or '(no context)'}\n"
+    )
+
+
+def _extract_answer(content: str) -> str:
+    text = (content or "").strip()
+    if not text:
         return ""
-    # To keep the baselines differentiable we intentionally introduce some errors.
-    if strategy == "cot":
-        return str(answer)
-    if strategy == "react":
-        return str(answer) if index % 5 else "insufficient information"
-    if strategy == "rewoo":
-        return str(answer) if index % 3 else ""
-    if strategy == "planner":
-        return str(answer) if index % 4 else "unknown"
-    if strategy == "planner_replan":
-        # First try like the planner: it may miss.
-        first = str(answer) if index % 4 else "unknown"
-        if first != "unknown":
-            return first
-        # Re-plan fall-back: act like CoT on the second pass.
-        return str(answer)
-    return str(answer)
+    for line in reversed([ln.strip() for ln in text.splitlines() if ln.strip()]):
+        if line.lower().startswith("answer:"):
+            return line.split(":", 1)[1].strip()
+    return text.splitlines()[-1].strip()
 
 
 def _collect_examples(strategy: str, dataset: str, split: str, limit: Optional[int]) -> List[Dict[str, Any]]:
@@ -65,15 +88,33 @@ def run_baseline(
 ) -> Dict[str, Any]:
     decoding = decoding or {}
     samples = _collect_examples(strategy, dataset, split, limit)
+    client = LLMClient(default_model=model)
     per_example: List[Dict[str, Any]] = []
     total_correct = 0
     total_latency = 0.0
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    total_calls = 0
 
     for idx, sample in enumerate(samples):
         start = time.perf_counter()
-        prediction = _simulate_prediction(strategy, sample, idx)
+        prompt = _build_prompt(strategy, sample)
+        response = client.complete(
+            prompt,
+            model=model,
+            temperature=float(decoding.get("temperature", 0.2)),
+            max_tokens=int(decoding.get("max_new_tokens", 256)),
+        )
+        content = str((response or {}).get("content") or "")
+        usage = (response or {}).get("usage") or {}
+        prediction = _extract_answer(content)
         latency = time.perf_counter() - start
         total_latency += latency
+        total_calls += 1
+        if isinstance(usage.get("prompt_tokens"), int):
+            total_prompt_tokens += int(usage["prompt_tokens"])
+        if isinstance(usage.get("completion_tokens"), int):
+            total_completion_tokens += int(usage["completion_tokens"])
         gold = _normalise_text(sample.get("answer"))
         correct = gold and gold == _normalise_text(prediction)
         total_correct += int(correct)
@@ -85,6 +126,8 @@ def run_baseline(
                 "reference": sample.get("answer"),
                 "correct": bool(correct),
                 "latency_sec": latency,
+                "prompt_tokens": usage.get("prompt_tokens"),
+                "completion_tokens": usage.get("completion_tokens"),
             }
         )
 
@@ -92,6 +135,7 @@ def run_baseline(
     accuracy = total_correct / total if total else 0.0
     avg_latency = total_latency / total if total else 0.0
     stats = DEFAULT_SYSTEM_STATS.get(strategy, {})
+    token_total = total_prompt_tokens + total_completion_tokens
 
     metrics = {
         "dataset": dataset,
@@ -101,8 +145,8 @@ def run_baseline(
         "accuracy": accuracy,
         "num_examples": total,
         "latency_sec": round(avg_latency, 3),
-        "calls": stats.get("calls"),
-        "tokens": stats.get("tokens"),
+        "calls": total_calls if total_calls else stats.get("calls"),
+        "tokens": token_total if token_total else stats.get("tokens"),
         "api_cost": stats.get("api_cost"),
         "decoding": decoding,
         "per_example": per_example,

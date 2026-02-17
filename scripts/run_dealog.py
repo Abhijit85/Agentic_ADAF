@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -50,22 +51,43 @@ def run_dataset(
     split: str,
     llm: str,
     *,
+    summarizer_llm: str | None,
+    summarizer_temperature: float,
+    summarizer_max_tokens: int,
     visual_caption_model: str | None,
     visual_caption_path: str | None,
     visual_ocr_engine: str | None,
     visual_ocr_model_dir: str | None,
     limit: int | None,
+    min_chain_len: int | None,
+    max_chain_len: int | None,
     max_rounds: int,
     scheduler_model: str | None,
     scheduler_threshold: float,
     parallel_retrieval: bool,
 ) -> Dict[str, Any]:
     data = load_benchmark(dataset, split=split, limit=limit)
+    if min_chain_len is not None or max_chain_len is not None:
+        filtered: List[Dict[str, Any]] = []
+        for sample in data:
+            chain = sample.get("operator_chain")
+            chain_len = len(chain) if isinstance(chain, list) else None
+            if chain_len is None:
+                continue
+            if min_chain_len is not None and chain_len < min_chain_len:
+                continue
+            if max_chain_len is not None and chain_len > max_chain_len:
+                continue
+            filtered.append(sample)
+        data = filtered
     if limit:
         data = data[:limit]
 
     orchestrator = AdaptiveOrchestrator(
         model_name=llm,
+        summarizer_model_name=summarizer_llm,
+        summarizer_temperature=summarizer_temperature,
+        summarizer_max_tokens=summarizer_max_tokens,
         visual_model_name=visual_caption_model,
         visual_caption_model=visual_caption_model,
         visual_caption_model_path=visual_caption_path,
@@ -126,7 +148,26 @@ def main() -> None:
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--split", default="dev")
     parser.add_argument("--llm", required=True)
+    parser.add_argument(
+        "--summarizer-llm",
+        default=os.getenv("DEALOG_SUMMARIZER_MODEL"),
+        help="Model used by summarizer/verifier client (defaults to DEALOG_SUMMARIZER_MODEL).",
+    )
+    parser.add_argument(
+        "--summarizer-temperature",
+        type=float,
+        default=float(os.getenv("DEALOG_SUMMARIZER_TEMPERATURE", "0.2")),
+        help="Temperature for summarizer completions.",
+    )
+    parser.add_argument(
+        "--summarizer-max-tokens",
+        type=int,
+        default=int(os.getenv("DEALOG_SUMMARIZER_MAX_TOKENS", "256")),
+        help="Max completion tokens for summarizer completions.",
+    )
     parser.add_argument("--limit", type=int, default=None, help="Optional cap on the number of samples.")
+    parser.add_argument("--min-chain-len", type=int, default=None, help="Filter samples by minimum operator-chain length.")
+    parser.add_argument("--max-chain-len", type=int, default=None, help="Filter samples by maximum operator-chain length.")
     parser.add_argument("--results-file", type=Path, required=True)
     parser.add_argument("--visual-caption-model", default=None)
     parser.add_argument("--visual-caption-path", default=None)
@@ -142,11 +183,16 @@ def main() -> None:
         dataset=args.dataset,
         split=args.split,
         llm=args.llm,
+        summarizer_llm=args.summarizer_llm,
+        summarizer_temperature=args.summarizer_temperature,
+        summarizer_max_tokens=args.summarizer_max_tokens,
         visual_caption_model=args.visual_caption_model,
         visual_caption_path=args.visual_caption_path,
         visual_ocr_engine=args.visual_ocr_engine,
         visual_ocr_model_dir=args.visual_ocr_model_dir,
         limit=args.limit,
+        min_chain_len=args.min_chain_len,
+        max_chain_len=args.max_chain_len,
         max_rounds=args.max_rounds,
         scheduler_model=args.scheduler,
         scheduler_threshold=args.scheduler_threshold,

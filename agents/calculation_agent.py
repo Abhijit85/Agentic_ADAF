@@ -1,6 +1,7 @@
 import ast
 import operator
 import re
+from statistics import mean
 from typing import Any, List, Optional
 
 
@@ -48,6 +49,8 @@ class CalculationAgent:
         *,
         question: Optional[str] = None,
         table: Optional[List[List[Any]]] = None,
+        reasoning_steps: Optional[List[dict]] = None,
+        title: Optional[str] = None,
         operator_chain: Optional[List[dict]] = None,
         base_value: Optional[float] = None,
     ):
@@ -65,8 +68,213 @@ class CalculationAgent:
         if chain_result is not None:
             return chain_result
 
+        crt_result = self._derive_from_crt_steps(question, table, reasoning_steps, title=title)
+        if crt_result is not None:
+            return crt_result
+
         derived = self._derive_from_table(question, table)
         return derived
+
+    def _derive_from_crt_steps(
+        self,
+        question: Optional[str],
+        table: Optional[List[List[Any]]],
+        reasoning_steps: Optional[List[dict]],
+        *,
+        title: Optional[str] = None,
+    ):
+        if not question or not table or not isinstance(table, list) or len(table) < 2:
+            return None
+        headers = [str(h).strip().lower() for h in (table[0] or [])]
+        rows = [r for r in table[1:] if isinstance(r, list) and r]
+        if not headers or not rows:
+            return None
+
+        q = question.lower()
+        step_details = []
+        for step in reasoning_steps or []:
+            if isinstance(step, dict):
+                detail = str(step.get("detail", "")).strip().lower()
+                if detail:
+                    step_details.append(detail)
+
+        numeric_cols = self._numeric_columns(rows, len(headers))
+        if not numeric_cols:
+            return None
+
+        target_col = self._pick_target_column(headers, q, step_details, numeric_cols)
+        if target_col is None:
+            target_col = numeric_cols[0]
+
+        values = []
+        for row in rows:
+            if len(row) <= target_col:
+                continue
+            num = self._extract_first_number(row[target_col])
+            if num is not None:
+                values.append(num)
+        if not values:
+            return None
+
+        if self._expects_yes_no(q):
+            if "outlier" in q:
+                return "Yes" if self._has_outlier(values) else "No"
+            if "higher" in q or "lower" in q or "similar" in q or "same" in q:
+                return "Yes" if self._simple_yes_no_compare(q, headers, rows, target_col) else "No"
+
+        if self._expects_more_less_equal(q):
+            comp = self._more_less_equal_compare(q, headers, rows, target_col)
+            if comp:
+                return comp
+
+        top_n = self._extract_top_n(q)
+        nums = sorted(values, reverse=True)[:top_n] if top_n else values
+        if "average" in q or "mean" in q:
+            return round(mean(nums), 3)
+        if "sum" in q or "total" in q:
+            return round(sum(nums), 3)
+        if "highest" in q or "largest" in q or "max" in q:
+            return round(max(values), 3)
+        if "lowest" in q or "smallest" in q or "min" in q:
+            return round(min(values), 3)
+
+        # Helpful hint for the LLM summarizer to follow operation schema.
+        if step_details:
+            return f"CRT operation hints: title={title or ''}; target_column={headers[target_col]}; steps={'; '.join(step_details)}"
+        return None
+
+    def _numeric_columns(self, rows: List[List[Any]], num_cols: int) -> List[int]:
+        numeric_cols = []
+        for c in range(num_cols):
+            hits = 0
+            total = 0
+            for row in rows:
+                if len(row) <= c:
+                    continue
+                total += 1
+                if self._extract_first_number(row[c]) is not None:
+                    hits += 1
+            if total and hits / total >= 0.4:
+                numeric_cols.append(c)
+        return numeric_cols
+
+    def _pick_target_column(
+        self,
+        headers: List[str],
+        question: str,
+        step_details: List[str],
+        numeric_cols: List[int],
+    ) -> Optional[int]:
+        tokens = set(re.findall(r"[a-zA-Z]+", question))
+        for detail in step_details:
+            detail_tokens = set(re.findall(r"[a-zA-Z]+", detail))
+            tokens |= detail_tokens
+        best = None
+        best_score = -1
+        for idx in numeric_cols:
+            if idx >= len(headers):
+                continue
+            ht = set(re.findall(r"[a-zA-Z]+", headers[idx]))
+            score = len(tokens & ht)
+            if score > best_score:
+                best_score = score
+                best = idx
+        return best
+
+    def _extract_first_number(self, value: Any) -> Optional[float]:
+        text = str(value).replace(",", "").replace("%", " ").strip()
+        m = re.search(r"[-+]?\d+(?:\.\d+)?", text)
+        if not m:
+            return None
+        try:
+            return float(m.group(0))
+        except ValueError:
+            return None
+
+    def _expects_yes_no(self, question: str) -> bool:
+        return "answer with only 'yes' or 'no'" in question or "answer with only \"yes\" or \"no\"" in question
+
+    def _expects_more_less_equal(self, question: str) -> bool:
+        return "answer with only 'more', 'less' or 'equal'" in question or "answer with only \"more\", \"less\" or \"equal\"" in question
+
+    def _has_outlier(self, values: List[float]) -> bool:
+        if len(values) < 4:
+            return False
+        vals = sorted(values)
+        q1 = vals[len(vals) // 4]
+        q3 = vals[(3 * len(vals)) // 4]
+        iqr = q3 - q1
+        if iqr <= 0:
+            return False
+        lo = q1 - 1.5 * iqr
+        hi = q3 + 1.5 * iqr
+        return any(v < lo or v > hi for v in vals)
+
+    def _extract_top_n(self, question: str) -> Optional[int]:
+        m = re.search(r"top\s+(\d+)", question)
+        if m:
+            try:
+                return int(m.group(1))
+            except ValueError:
+                return None
+        return None
+
+    def _simple_yes_no_compare(self, question: str, headers: List[str], rows: List[List[Any]], target_col: int) -> bool:
+        comp = self._more_less_equal_compare(question, headers, rows, target_col)
+        if comp is None:
+            return False
+        if "higher" in question:
+            return comp == "more"
+        if "lower" in question:
+            return comp == "less"
+        if "similar" in question or "same" in question:
+            return comp == "equal"
+        return False
+
+    def _more_less_equal_compare(self, question: str, headers: List[str], rows: List[List[Any]], target_col: int) -> Optional[str]:
+        # Try splitting by common comparison markers.
+        marker = None
+        for m in (" versus ", " vs ", " between "):
+            if m in question:
+                marker = m
+                break
+        if marker is None:
+            return None
+
+        # Identify two phrase anchors.
+        if marker.strip() == "between":
+            parts = question.split("between", 1)[-1].split(" and ", 1)
+        else:
+            parts = question.split(marker, 1)
+        if len(parts) < 2:
+            return None
+        left = re.findall(r"[a-zA-Z]+", parts[0].lower())
+        right = re.findall(r"[a-zA-Z]+", parts[1].lower())
+        left_tokens = {t for t in left if len(t) > 2}
+        right_tokens = {t for t in right if len(t) > 2}
+        if not left_tokens or not right_tokens:
+            return None
+
+        left_vals = []
+        right_vals = []
+        for row in rows:
+            row_text = " ".join(str(c).lower() for c in row)
+            if len(row) <= target_col:
+                continue
+            val = self._extract_first_number(row[target_col])
+            if val is None:
+                continue
+            if any(tok in row_text for tok in left_tokens):
+                left_vals.append(val)
+            if any(tok in row_text for tok in right_tokens):
+                right_vals.append(val)
+        if not left_vals or not right_vals:
+            return None
+        l = mean(left_vals)
+        r = mean(right_vals)
+        if abs(l - r) <= 1e-9:
+            return "equal"
+        return "more" if l > r else "less"
 
     def _derive_from_operator_chain(
         self,

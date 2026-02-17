@@ -53,10 +53,13 @@ def _build_prompt(sample: Dict[str, Any]) -> str:
     )
 
 
-def _extract_answer(response: Optional[str]) -> str:
+def _extract_answer(response: Optional[Any]) -> str:
     if not response:
         return ""
-    lines = [line.strip() for line in response.strip().splitlines() if line.strip()]
+    if isinstance(response, dict):
+        response = response.get("content") or ""
+    text = str(response)
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
     for line in lines[::-1]:
         if line.lower().startswith("answer:"):
             return line.split(":", 1)[1].strip()

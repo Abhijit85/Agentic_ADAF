@@ -23,6 +23,9 @@ class AdaptiveOrchestrator:
     def __init__(
         self,
         model_name: str | None = None,
+        summarizer_model_name: str | None = None,
+        summarizer_temperature: float = 0.2,
+        summarizer_max_tokens: int = 256,
         visual_model_name: str | None = None,
         visual_caption_model: str | None = None,
         visual_caption_model_path: str | None = None,
@@ -45,9 +48,14 @@ class AdaptiveOrchestrator:
             ocr_model_dir=visual_ocr_model_dir,
         )
         self.summarizer = SummarizingAgent(
-            llm_client=LLMClient(default_model=model_name)
+            llm_client=LLMClient(default_model=summarizer_model_name or model_name),
+            temperature=summarizer_temperature,
+            max_tokens=summarizer_max_tokens,
         )
-        self.verifier = VerificationAgent()
+        self.verifier = VerificationAgent(
+            llm_client=LLMClient(default_model=summarizer_model_name or model_name),
+            model=summarizer_model_name or model_name,
+        )
         self._entry_transform = entry_transform
         self._max_rounds = max_rounds
         self._scheduler = GatedScheduler(
@@ -80,6 +88,8 @@ class AdaptiveOrchestrator:
             expression if isinstance(expression, str) and expression.strip() else None,
             question=question,
             table=sample.get("table"),
+            reasoning_steps=sample.get("reasoning_steps"),
+            title=sample.get("title"),
             operator_chain=sample.get("operator_chain"),
             base_value=sample.get("base_value"),
         )

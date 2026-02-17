@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -105,7 +106,80 @@ def _load_crtqa(split: str = "dev") -> List[Dict[str, Any]]:
         "dev": "crtqa_dev.json",
         "test": "crtqa_test.json",
     }
-    return _load_flat_dataset(base_dir, file_map, split)
+    raw = _load_flat_dataset(base_dir, file_map, split)
+    processed: List[Dict[str, Any]] = []
+    for sample in raw:
+        if not isinstance(sample, dict):
+            continue
+        row = dict(sample)
+
+        title = str(row.get("title") or row.get("Tittle") or row.get("Title") or "").strip()
+        table_id = str(row.get("table_id") or "").strip()
+        reasoning_steps = row.get("reasoning_steps") or []
+        if not isinstance(reasoning_steps, list):
+            reasoning_steps = []
+
+        table = row.get("table")
+        if (not isinstance(table, list) or not table) and table_id:
+            hydrated_table = _load_crtqa_table(table_id)
+            if hydrated_table:
+                row["table"] = hydrated_table
+
+        # Build pseudo-context when CRT-QA conversion does not include table/context text.
+        paragraphs = row.get("paragraphs")
+        if not isinstance(paragraphs, list):
+            paragraphs = []
+        if not any(str(p).strip() for p in paragraphs):
+            pseudo_bits: List[str] = []
+            if title:
+                pseudo_bits.append(f"Table title: {title}.")
+            if reasoning_steps:
+                rendered_steps = []
+                for idx, step in enumerate(reasoning_steps, start=1):
+                    if isinstance(step, dict):
+                        typ = str(step.get("type", "")).strip()
+                        name = str(step.get("name", "")).strip()
+                        detail = str(step.get("detail", "")).strip()
+                        rendered_steps.append(
+                            f"Step {idx}: type={typ or 'unknown'}, name={name or 'unknown'}, detail={detail or 'n/a'}"
+                        )
+                if rendered_steps:
+                    pseudo_bits.append("Reasoning annotations: " + " ; ".join(rendered_steps))
+            paragraphs = [" ".join(pseudo_bits)] if pseudo_bits else []
+            row["paragraphs"] = paragraphs
+
+        # Populate a lightweight operation hint for the table agent.
+        if not row.get("table_operation"):
+            op_name = None
+            for step in reasoning_steps:
+                if isinstance(step, dict) and str(step.get("type", "")).lower() == "operation":
+                    op_name = str(step.get("name", "")).strip().lower()
+                    break
+            if op_name in {"indexing", "filtering", "grouping", "sorting"}:
+                row["table_operation"] = "noop"
+
+        processed.append(row)
+    return processed
+
+
+@lru_cache(maxsize=8192)
+def _load_crtqa_table(table_id: str) -> List[List[str]]:
+    """Load a CRT-QA raw table by table id from the extracted all_csv folder."""
+
+    if not table_id:
+        return []
+    base = Path(__file__).resolve().parent.parent / "data" / "CRTQA" / "source" / "CRT-QA" / "all_csv"
+    path = base / table_id
+    if not path.exists():
+        return []
+    rows: List[List[str]] = []
+    with path.open("r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rows.append([cell.strip() for cell in line.split("#")])
+    return rows
 
 
 def _load_multi_hop_synth(split: str = "dev") -> List[Dict[str, Any]]:

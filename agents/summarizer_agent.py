@@ -13,8 +13,16 @@ from utils.shared_log import SharedLog
 class SummarizingAgent:
     """Synthesize an answer from accumulated log entries."""
 
-    def __init__(self, llm_client: Optional[LLMClient] = None) -> None:
+    def __init__(
+        self,
+        llm_client: Optional[LLMClient] = None,
+        *,
+        temperature: float = 0.2,
+        max_tokens: int = 256,
+    ) -> None:
         self._llm = llm_client or LLMClient()
+        self._temperature = temperature
+        self._max_tokens = max_tokens
 
     def synthesize(self, question: str, log: SharedLog) -> Dict[str, str]:
         """Return a candidate answer and supporting rationale."""
@@ -37,22 +45,29 @@ class SummarizingAgent:
         rationale = " \n".join(["Question: " + question] + evidence)
 
         prompt = self._build_prompt(question, evidence)
-        llm_result = self._llm.complete(prompt) if self._llm else None
+        llm_result = (
+            self._llm.complete(
+                prompt,
+                temperature=self._temperature,
+                max_tokens=self._max_tokens,
+            )
+            if self._llm
+            else None
+        )
 
         normalized = None
         confidence = 0.5
         prompt_tokens = None
         completion_tokens = None
 
-        if llm_result and isinstance(llm_result, dict):
-            llm_answer = llm_result.get("content") or ""
-            usage = llm_result.get("usage") or {}
-            prompt_tokens = usage.get("prompt_tokens")
-            completion_tokens = usage.get("completion_tokens")
-            confidence = self._confidence_from_usage(usage)
-            answer, normalized = self._parse_answer(llm_answer)
-        else:
-            answer = self._fallback_answer(evidence) or question
+        if not llm_result or not isinstance(llm_result, dict):
+            raise RuntimeError("Summarizer LLM call failed; heuristic fallback is disabled.")
+        llm_answer = llm_result.get("content") or ""
+        usage = llm_result.get("usage") or {}
+        prompt_tokens = usage.get("prompt_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        confidence = self._confidence_from_usage(usage)
+        answer, normalized = self._parse_answer(llm_answer, question=question)
 
         return {
             "answer": normalized or answer,
@@ -73,6 +88,16 @@ class SummarizingAgent:
                 "Reasoning: describe the lookup (year, column) and any arithmetic.\n"
                 "Answer: <numeric value only>."
             )
+        elif self._looks_like_crtqa(question):
+            instructions = (
+                "You are solving CRT-QA style table reasoning.\n"
+                "Use only the provided evidence. Prioritize table cells and calculation outputs over free-text context.\n"
+                "When evidence is insufficient, choose the closest grounded answer from evidence and keep output concise.\n"
+                "If the question requests a constrained format, obey it exactly.\n"
+                "Format:\n"
+                "Reasoning: short evidence-grounded steps (row/column references when available).\n"
+                "Answer: final answer only."
+            )
         else:
             instructions = (
                 "You are a financial/table reasoning assistant.\n"
@@ -83,15 +108,14 @@ class SummarizingAgent:
                 "Reasoning: Step-by-step explanation referencing specific evidence items.\n"
                 "Answer: <concise numeric or textual answer>."
             )
+        q_lower = question.lower()
+        if "answer with only 'yes' or 'no'" in q_lower or "answer with only \"yes\" or \"no\"" in q_lower:
+            instructions += "\nReturn exactly one token in Answer: Yes or No."
+        if "answer with only 'more', 'less' or 'equal'" in q_lower or "answer with only \"more\", \"less\" or \"equal\"" in q_lower:
+            instructions += "\nReturn exactly one token in Answer: more, less, or equal."
         return f"{instructions}\nQuestion: {question}\nEvidence:\n{evidence_text}"
 
-    def _fallback_answer(self, evidence: List[str]) -> Optional[str]:
-        for item in evidence:
-            if ":" in item:
-                return item.split(":", 1)[1].strip()
-        return None
-
-    def _parse_answer(self, llm_response: str) -> tuple[str, Optional[str]]:
+    def _parse_answer(self, llm_response: str, *, question: str = "") -> tuple[str, Optional[str]]:
         lines = [line.strip() for line in llm_response.strip().splitlines() if line.strip()]
         candidate = None
         for line in lines:
@@ -102,14 +126,57 @@ class SummarizingAgent:
         if not candidate:
             candidate = lines[-1] if lines else llm_response.strip()
 
+        constrained = self._extract_constrained_answer(question, candidate, llm_response)
+        if constrained is not None:
+            return constrained, self._extract_numeric_span(constrained)
+
         normalized = self._extract_numeric_span(candidate)
         return candidate, normalized
+
+    def _extract_constrained_answer(
+        self, question: str, candidate: str, raw_response: str
+    ) -> Optional[str]:
+        q = (question or "").lower()
+        cand = (candidate or "").strip()
+        raw = (raw_response or "").lower()
+
+        if "answer with only 'yes' or 'no'" in q or "answer with only \"yes\" or \"no\"" in q:
+            tokens = re.findall(r"\b(yes|no)\b", f"{cand.lower()} {raw}")
+            if tokens:
+                return tokens[0].capitalize()
+            return None
+
+        if "answer with only 'more', 'less' or 'equal'" in q or "answer with only \"more\", \"less\" or \"equal\"" in q:
+            tokens = re.findall(r"\b(more|less|equal)\b", f"{cand.lower()} {raw}")
+            if tokens:
+                return tokens[0]
+            return None
+
+        if "answer with only" in q and "nothing else" in q:
+            # For constrained-format prompts, use first non-empty token span.
+            cleaned = cand.strip().strip(".")
+            if cleaned:
+                return cleaned
+        return None
 
     def _looks_like_finqa(self, question: str) -> bool:
         lowered = question.lower()
         has_year = bool(re.search(r"(19|20)\d{2}", lowered))
         financial_terms = ["revenue", "profit", "earnings", "reported", "income"]
         return has_year and any(term in lowered for term in financial_terms)
+
+    def _looks_like_crtqa(self, question: str) -> bool:
+        lowered = question.lower()
+        crt_markers = [
+            "answer with only",
+            "standard deviation",
+            "most common",
+            "outlier",
+            "top",
+            "within one standard deviation",
+            "versus",
+        ]
+        return any(marker in lowered for marker in crt_markers)
 
     def _extract_numeric_span(self, text: str) -> Optional[str]:
         match = re.search(r"[-+]?[0-9]+(?:\.[0-9]+)?", text.replace(",", ""))
