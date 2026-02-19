@@ -220,7 +220,7 @@
 # data/MMQA/*
 
 # Local environment files
-.env
+# .env
 .envrc
 .venv/
 env/
