@@ -23,6 +23,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--decoding", default="{}")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--min-chain-len", type=int, default=None)
+    parser.add_argument("--max-chain-len", type=int, default=None)
     return parser.parse_args()
 
 
@@ -36,6 +38,8 @@ def main() -> None:
         model=args.model,
         output=args.output,
         limit=args.limit,
+        min_chain_len=args.min_chain_len,
+        max_chain_len=args.max_chain_len,
         decoding=decoding,
     )
     print(f"[Planner-Replan] results saved to {args.output}")

@@ -31,6 +31,16 @@ class VerificationAgent:
             # Without a reference answer we cannot verify automatically.
             return False
 
+        reference_text = self._normalise_text(reference)
+        candidate_text = self._normalise_text(candidate)
+
+        # Fast deterministic checks for common numeric / exact-match cases.
+        if reference_text and candidate_text and reference_text == candidate_text:
+            return True
+        numeric_verdict = self._numeric_verdict(candidate_text, reference_text)
+        if numeric_verdict is not None:
+            return numeric_verdict
+
         prompt = (
             "You are a strict QA verifier.\n"
             "Task: Decide if the candidate answer semantically matches the reference answer.\n"
@@ -41,8 +51,8 @@ class VerificationAgent:
             "Examples:\n"
             "Reference: 42\nCandidate: 42\nVERDICT: true\n"
             "Reference: Paris\nCandidate: London\nVERDICT: false\n\n"
-            f"Reference: {reference}\n"
-            f"Candidate: {candidate}\n"
+            f"Reference: {reference_text}\n"
+            f"Candidate: {candidate_text}\n"
         )
         content = self._complete_text(prompt)
         verdict = self._extract_verdict(content)
@@ -53,8 +63,8 @@ class VerificationAgent:
         retry_prompt = (
             "You must answer with exactly one token: true or false.\n"
             "Do not ask questions. Do not add explanation.\n\n"
-            f"Reference: {reference}\n"
-            f"Candidate: {candidate}\n"
+            f"Reference: {reference_text}\n"
+            f"Candidate: {candidate_text}\n"
             f"Previous response (invalid): {content}\n"
             "Answer:"
         )
@@ -88,3 +98,30 @@ class VerificationAgent:
         if token in {"true", "false"}:
             return token == "true"
         return None
+
+    def _normalise_text(self, value: Any) -> str:
+        if value is None:
+            return ""
+        return str(value).strip().lower()
+
+    def _numeric_verdict(self, candidate: str, reference: str) -> Optional[bool]:
+        """Return numeric verdict when both sides contain at least one number."""
+
+        ref_numbers = self._extract_numbers(reference)
+        cand_numbers = self._extract_numbers(candidate)
+        if not ref_numbers or not cand_numbers:
+            return None
+
+        target = ref_numbers[0]
+        tolerance = max(1e-3, 0.01 * abs(target))
+        return any(abs(target - value) <= tolerance for value in cand_numbers)
+
+    def _extract_numbers(self, text: str) -> list[float]:
+        matches = re.findall(r"[-+]?\d+(?:\.\d+)?", text.replace(",", ""))
+        numbers: list[float] = []
+        for match in matches:
+            try:
+                numbers.append(float(match))
+            except ValueError:
+                continue
+        return numbers

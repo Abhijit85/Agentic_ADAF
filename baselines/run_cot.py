@@ -26,6 +26,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--min-chain-len", type=int, default=None)
+    parser.add_argument("--max-chain-len", type=int, default=None)
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--max-new-tokens", type=int, default=256)
     return parser.parse_args()
@@ -92,8 +94,21 @@ def _numbers_match(ref: str, cand: str) -> bool:
 
 
 def run_cot(args: argparse.Namespace) -> Dict[str, Any]:
-    data = load_benchmark(args.dataset, split=args.split, limit=args.limit)
-    if args.limit:
+    data = load_benchmark(args.dataset, split=args.split, limit=None)
+    if args.min_chain_len is not None or args.max_chain_len is not None:
+        filtered: List[Dict[str, Any]] = []
+        for sample in data:
+            chain = sample.get("operator_chain")
+            chain_len = len(chain) if isinstance(chain, list) else None
+            if chain_len is None:
+                continue
+            if args.min_chain_len is not None and chain_len < args.min_chain_len:
+                continue
+            if args.max_chain_len is not None and chain_len > args.max_chain_len:
+                continue
+            filtered.append(sample)
+        data = filtered
+    if args.limit is not None and args.limit > 0:
         data = data[: args.limit]
 
     client = LLMClient(default_model=args.model)
@@ -137,6 +152,8 @@ def run_cot(args: argparse.Namespace) -> Dict[str, Any]:
         "calls": None,
         "tokens": None,
         "api_cost": None,
+        "min_chain_len": args.min_chain_len,
+        "max_chain_len": args.max_chain_len,
         "per_example": per_example,
     }
 

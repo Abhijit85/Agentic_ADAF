@@ -76,6 +76,11 @@ Fill in the sample `.env` with your own credentials:
 - `HF_API_TOKEN` (used for gated HuggingFace downloads)
 - `OPENROUTER_API_KEY` (plus optional `OPENROUTER_BASE_URL`, `OPENROUTER_SITE_URL`, `OPENROUTER_APP_NAME`)
 - Model choices such as `PRIMARY_MODEL_NAME`, `VISUAL_MODEL_NAME`, and `DEALOG_SUMMARIZER_MODEL`
+- Local backend knobs:
+  - `DEALOG_LLM_BACKEND=local` to force local Transformers inference (`auto` will choose local when no API key is set and a local model path is available)
+  - `PRIMARY_MODEL_PATH` / `DEALOG_SUMMARIZER_MODEL_PATH` (supports HuggingFace cache roots like `.../models--org--name` and auto-selects the latest snapshot)
+  - Optional GPU pinning for all DeALoG scripts: `DEALOG_CUDA_VISIBLE_DEVICES` (comma-separated ids, e.g., `0,2,3`)
+- `TMPDIR=/mnt/achakr40` to keep runtime temp files under `/mnt/achakr40`
 - Visual stack:
   - `VISUAL_CAPTION_MODEL` / `VISUAL_CAPTION_MODEL_PATH` (local BLIP‑2 directory)
   - `VISUAL_OCR_ENGINE` / `VISUAL_OCR_MODEL_DIR` (PaddleOCR cache folder)
@@ -104,6 +109,16 @@ DeALoG’s summarizer/verifier pipeline relies on this credential (or `OPENAI_AP
 to call the backing LLM; without it the agent falls back to a heuristic that may be
 less accurate.
 
+### Use local Transformers backend
+To run summarizer/verifier with local checkpoints instead of OpenRouter:
+```bash
+export DEALOG_LLM_BACKEND=local
+export PRIMARY_MODEL_PATH=/path/to/models--org--name
+export DEALOG_SUMMARIZER_MODEL_PATH=/path/to/models--org--name
+```
+If you point to a HuggingFace cache root (`models--org--name`), the client
+automatically resolves the newest entry under `snapshots/`.
+
 Run the pipeline with any supported OpenAI model, e.g. `gpt-3.5-turbo`:
 ```bash
 python main.py --dataset tatqa --llm gpt-3.5-turbo
@@ -126,7 +141,7 @@ into the benchmarking harness:
 ```bash
 python scripts/run_dealog.py \
   --dataset tatqa --split dev --llm ${PRIMARY_MODEL_NAME} \
-  --results-file /tmp/dealog_tatqa.json \
+  --results-file /mnt/achakr40/dealog_tatqa.json \
   --visual-caption-model ${VISUAL_CAPTION_MODEL} \
   --visual-caption-path ${VISUAL_CAPTION_MODEL_PATH} \
   --visual-ocr-engine ${VISUAL_OCR_ENGINE} \
@@ -194,6 +209,9 @@ python scripts/run_table6_long_horizon.py \
   --output-dir benchmarks/results/table6_long_horizon
 ```
 
+To pin this run to selected GPUs via `.env`, set:
+`DEALOG_CUDA_VISIBLE_DEVICES=0,2,3`
+
 It writes:
 - `benchmarks/results/table6_long_horizon/table6_long_horizon.md`
 - `benchmarks/results/table6_long_horizon/table6_long_horizon.json`
@@ -201,6 +219,27 @@ It writes:
 Required datasets for all rows:
 - `data/CRTQA/crtqa_{train,dev,test}.json`
 - `data/multi_hop_synthetic/multi_hop_{train,dev,test}.json`
+
+### Table-6 aligned baseline runs (CoT / ReAct / ReWOO / Planner)
+
+Use the baseline runner below to evaluate the same rows (`CRT-QA`, `Multi-Hop 5–6`,
+`Multi-Hop 7–8`, `All`) for one or more baseline systems:
+
+```bash
+python scripts/run_table6_baselines.py \
+  --llm ${PRIMARY_MODEL_NAME} \
+  --systems cot,react,rewoo,planner,planner_replan \
+  --split dev \
+  --output-dir benchmarks/results/table6_baselines
+```
+
+To pin this run to selected GPUs via `.env`, set:
+`DEALOG_CUDA_VISIBLE_DEVICES=0,2,3`
+
+Optional flags:
+- `--limit 20` for a quick smoke run.
+- `--systems ... ,dealog` to include DeALoG in the same table.
+- `--decoding '{"temperature":0.2,"max_new_tokens":512}'` for non-CoT baselines.
 
 ### Visual caption & OCR models
 BLIP-2 FLAN-T5-XL weights are mirrored under `models/blip2_flan_t5_xl/`. PaddleOCR

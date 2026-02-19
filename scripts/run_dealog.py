@@ -7,11 +7,19 @@ import argparse
 import json
 import os
 import re
+import string
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import sys
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    pass
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -24,7 +32,11 @@ from utils.data_loader import load_benchmark
 def _normalise_answer(value: Any) -> str:
     if value is None:
         return ""
-    return str(value).strip().lower()
+    text = str(value).strip().lower()
+    text = text.replace("−", "-")
+    text = re.sub(r"\s+", " ", text)
+    # Tolerate common punctuation-only formatting drift (e.g., "ferrari.")
+    return text.strip(string.whitespace + string.punctuation)
 
 
 def _numbers_match(ref: str, cand: str) -> bool:
@@ -66,7 +78,9 @@ def run_dataset(
     scheduler_threshold: float,
     parallel_retrieval: bool,
 ) -> Dict[str, Any]:
-    data = load_benchmark(dataset, split=split, limit=limit)
+    # Apply limit after optional chain-length filtering so sliced subsets
+    # (e.g., 7-8 hops) don't get emptied by early truncation.
+    data = load_benchmark(dataset, split=split, limit=None)
     if min_chain_len is not None or max_chain_len is not None:
         filtered: List[Dict[str, Any]] = []
         for sample in data:
@@ -147,7 +161,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run DeALoG orchestrator and emit metrics.")
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--split", default="dev")
-    parser.add_argument("--llm", required=True)
+    parser.add_argument(
+        "--llm",
+        default=os.getenv("PRIMARY_MODEL_NAME"),
+        help="Primary model ID (defaults to PRIMARY_MODEL_NAME).",
+    )
     parser.add_argument(
         "--summarizer-llm",
         default=os.getenv("DEALOG_SUMMARIZER_MODEL"),
@@ -177,7 +195,25 @@ def main() -> None:
     parser.add_argument("--scheduler", default=None, help="Path to a joblib logistic gate.")
     parser.add_argument("--scheduler-threshold", type=float, default=0.4, help="p(continue) threshold.")
     parser.add_argument("--parallel-retrieval", action="store_true", help="Enable parallel retrieval micro-benchmark mode.")
+    parser.add_argument(
+        "--cuda-visible-devices",
+        default=os.getenv("DEALOG_CUDA_VISIBLE_DEVICES"),
+        help="Optional CUDA_VISIBLE_DEVICES value for this run (defaults to DEALOG_CUDA_VISIBLE_DEVICES).",
+    )
     args = parser.parse_args()
+
+    # Shell expansion may pass an empty string for --llm/--summarizer-llm; recover from .env.
+    args.llm = str(args.llm or "").strip() or str(os.getenv("PRIMARY_MODEL_NAME") or "").strip()
+    if not args.llm:
+        parser.error("Missing model ID. Pass --llm or set PRIMARY_MODEL_NAME in .env.")
+
+    args.summarizer_llm = (
+        str(args.summarizer_llm or "").strip() or str(os.getenv("DEALOG_SUMMARIZER_MODEL") or "").strip() or None
+    )
+
+    if args.cuda_visible_devices is not None and str(args.cuda_visible_devices).strip():
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.cuda_visible_devices).strip()
+        print(f"[DeALoG] CUDA_VISIBLE_DEVICES={os.environ['CUDA_VISIBLE_DEVICES']}")
 
     metrics = run_dataset(
         dataset=args.dataset,

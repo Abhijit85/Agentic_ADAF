@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -81,11 +82,23 @@ def main() -> None:
     parser.add_argument("--ablation-max-tokens", type=int, default=8192)
     parser.add_argument("--summarizer-temperature", type=float, default=0.2)
     parser.add_argument(
+        "--cuda-visible-devices",
+        default=os.getenv("DEALOG_CUDA_VISIBLE_DEVICES"),
+        help=(
+            "Optional CUDA_VISIBLE_DEVICES value for this run "
+            "(defaults to DEALOG_CUDA_VISIBLE_DEVICES)."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("benchmarks/results/table6_long_horizon"),
     )
     args = parser.parse_args()
+
+    if args.cuda_visible_devices is not None and str(args.cuda_visible_devices).strip():
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.cuda_visible_devices).strip()
+        print(f"[Table6-DeALoG] CUDA_VISIBLE_DEVICES={os.environ['CUDA_VISIBLE_DEVICES']}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -100,12 +113,13 @@ def main() -> None:
     table_rows: List[Dict[str, Any]] = []
 
     for task, notes, dataset, min_len, max_len in specs:
+        row_temperature = 0.0 if dataset == "crtqa" else args.summarizer_temperature
         base_metrics = _run_row(
             dataset=dataset,
             split=args.split,
             llm=args.llm,
             summarizer_llm=args.summarizer_llm,
-            summarizer_temperature=args.summarizer_temperature,
+            summarizer_temperature=row_temperature,
             summarizer_max_tokens=args.base_max_tokens,
             max_rounds=args.max_rounds,
             limit=args.limit,
@@ -117,7 +131,7 @@ def main() -> None:
             split=args.split,
             llm=args.llm,
             summarizer_llm=args.summarizer_llm,
-            summarizer_temperature=args.summarizer_temperature,
+            summarizer_temperature=row_temperature,
             summarizer_max_tokens=args.ablation_max_tokens,
             max_rounds=args.max_rounds,
             limit=args.limit,
@@ -156,6 +170,7 @@ def main() -> None:
             "ablation_max_tokens": args.ablation_max_tokens,
             "summarizer_temperature": args.summarizer_temperature,
             "limit": args.limit,
+            "cuda_visible_devices": args.cuda_visible_devices,
         },
         "rows": table_rows,
         "baseline_metrics": baseline_results,

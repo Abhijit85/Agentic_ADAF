@@ -72,8 +72,34 @@ def _extract_answer(content: str) -> str:
     return text.splitlines()[-1].strip()
 
 
-def _collect_examples(strategy: str, dataset: str, split: str, limit: Optional[int]) -> List[Dict[str, Any]]:
-    return load_benchmark(dataset, split=split, limit=limit)
+def _collect_examples(
+    strategy: str,
+    dataset: str,
+    split: str,
+    limit: Optional[int],
+    min_chain_len: Optional[int],
+    max_chain_len: Optional[int],
+) -> List[Dict[str, Any]]:
+    del strategy  # style-specific filtering can be added here later if needed
+    samples = load_benchmark(dataset, split=split, limit=None)
+
+    if min_chain_len is not None or max_chain_len is not None:
+        filtered: List[Dict[str, Any]] = []
+        for sample in samples:
+            chain = sample.get("operator_chain")
+            chain_len = len(chain) if isinstance(chain, list) else None
+            if chain_len is None:
+                continue
+            if min_chain_len is not None and chain_len < min_chain_len:
+                continue
+            if max_chain_len is not None and chain_len > max_chain_len:
+                continue
+            filtered.append(sample)
+        samples = filtered
+
+    if limit is not None and limit > 0:
+        return samples[:limit]
+    return samples
 
 
 def run_baseline(
@@ -84,10 +110,12 @@ def run_baseline(
     model: str,
     output: Path,
     limit: Optional[int],
+    min_chain_len: Optional[int] = None,
+    max_chain_len: Optional[int] = None,
     decoding: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     decoding = decoding or {}
-    samples = _collect_examples(strategy, dataset, split, limit)
+    samples = _collect_examples(strategy, dataset, split, limit, min_chain_len, max_chain_len)
     client = LLMClient(default_model=model)
     per_example: List[Dict[str, Any]] = []
     total_correct = 0
@@ -149,6 +177,8 @@ def run_baseline(
         "tokens": token_total if token_total else stats.get("tokens"),
         "api_cost": stats.get("api_cost"),
         "decoding": decoding,
+        "min_chain_len": min_chain_len,
+        "max_chain_len": max_chain_len,
         "per_example": per_example,
     }
 

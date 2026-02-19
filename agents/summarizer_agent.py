@@ -44,12 +44,27 @@ class SummarizingAgent:
 
         rationale = " \n".join(["Question: " + question] + evidence)
 
+        # For synthetic arithmetic chains, the calculator output is the most
+        # faithful source of truth. Use it directly to avoid LLM formatting drift.
+        if self._looks_like_multi_hop_arithmetic(question) and calculation and calculation.content not in (None, ""):
+            calc_text = str(calculation.content).strip()
+            calc_numeric = self._extract_numeric_span(calc_text)
+            direct_answer = calc_numeric or calc_text
+            return {
+                "answer": direct_answer,
+                "rationale": rationale,
+                "confidence": 1.0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+            }
+
         prompt = self._build_prompt(question, evidence)
+        max_tokens = self._runtime_max_tokens(question)
         llm_result = (
             self._llm.complete(
                 prompt,
                 temperature=self._temperature,
-                max_tokens=self._max_tokens,
+                max_tokens=max_tokens,
             )
             if self._llm
             else None
@@ -113,6 +128,8 @@ class SummarizingAgent:
             instructions += "\nReturn exactly one token in Answer: Yes or No."
         if "answer with only 'more', 'less' or 'equal'" in q_lower or "answer with only \"more\", \"less\" or \"equal\"" in q_lower:
             instructions += "\nReturn exactly one token in Answer: more, less, or equal."
+        if "answer with only 'better', 'worse' or 'equal'" in q_lower or "answer with only \"better\", \"worse\" or \"equal\"" in q_lower:
+            instructions += "\nReturn exactly one token in Answer: better, worse, or equal."
         return f"{instructions}\nQuestion: {question}\nEvidence:\n{evidence_text}"
 
     def _parse_answer(self, llm_response: str, *, question: str = "") -> tuple[str, Optional[str]]:
@@ -139,18 +156,34 @@ class SummarizingAgent:
         q = (question or "").lower()
         cand = (candidate or "").strip()
         raw = (raw_response or "").lower()
+        merged = f"{cand.lower()} {raw}"
 
         if "answer with only 'yes' or 'no'" in q or "answer with only \"yes\" or \"no\"" in q:
-            tokens = re.findall(r"\b(yes|no)\b", f"{cand.lower()} {raw}")
+            tokens = re.findall(r"\b(yes|no)\b", merged)
             if tokens:
                 return tokens[0].capitalize()
             return None
 
         if "answer with only 'more', 'less' or 'equal'" in q or "answer with only \"more\", \"less\" or \"equal\"" in q:
-            tokens = re.findall(r"\b(more|less|equal)\b", f"{cand.lower()} {raw}")
+            tokens = re.findall(r"\b(more|less|equal)\b", merged)
             if tokens:
                 return tokens[0]
             return None
+
+        if "answer with only 'better', 'worse' or 'equal'" in q or "answer with only \"better\", \"worse\" or \"equal\"" in q:
+            tokens = re.findall(r"\b(better|worse|equal)\b", merged)
+            if tokens:
+                return tokens[0]
+            return None
+
+        # Generic constrained-option recovery: extract quoted options from question
+        # and select the first option mentioned in the model output.
+        if "answer with only" in q:
+            options = self._extract_quoted_options(question)
+            for option in options:
+                pattern = r"\b" + re.escape(option).replace(r"\ ", r"\s+") + r"\b"
+                if re.search(pattern, merged):
+                    return option
 
         if "answer with only" in q and "nothing else" in q:
             # For constrained-format prompts, use first non-empty token span.
@@ -158,6 +191,14 @@ class SummarizingAgent:
             if cleaned:
                 return cleaned
         return None
+
+    def _extract_quoted_options(self, question: str) -> List[str]:
+        options: List[str] = []
+        for raw in re.findall(r"'([^']+)'|\"([^\"]+)\"", question):
+            opt = (raw[0] or raw[1] or "").strip().lower()
+            if opt and opt not in options:
+                options.append(opt)
+        return options
 
     def _looks_like_finqa(self, question: str) -> bool:
         lowered = question.lower()
@@ -177,6 +218,23 @@ class SummarizingAgent:
             "versus",
         ]
         return any(marker in lowered for marker in crt_markers)
+
+    def _looks_like_multi_hop_arithmetic(self, question: str) -> bool:
+        lowered = question.lower()
+        return (
+            "start from" in lowered
+            and "apply the following" in lowered
+            and "operations in order" in lowered
+            and "final value" in lowered
+        )
+
+    def _runtime_max_tokens(self, question: str) -> int:
+        q = (question or "").lower()
+        if self._looks_like_crtqa(question) and "answer with only" in q:
+            return min(self._max_tokens, 32)
+        if self._looks_like_crtqa(question):
+            return min(self._max_tokens, 256)
+        return self._max_tokens
 
     def _extract_numeric_span(self, text: str) -> Optional[str]:
         match = re.search(r"[-+]?[0-9]+(?:\.[0-9]+)?", text.replace(",", ""))
