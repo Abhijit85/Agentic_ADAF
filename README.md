@@ -64,184 +64,237 @@ message types, and agent contracts live in the new
 Choose a dataset via `--dataset` when running `main.py`, `scripts/run_dealog.py`, or the benchmarking harness.
 
 ## Setup
+
+### Requirements
+
+- Python 3.10+.
+- A CUDA-capable GPU is recommended for local model inference and for the larger evaluation runs.
+- One of the following model backends:
+  - `OPENAI_API_KEY` for OpenAI-hosted models.
+  - `OPENROUTER_API_KEY` for OpenRouter-hosted models.
+  - Local HuggingFace checkpoints for offline or self-hosted inference.
+
+Install the Python dependencies in a fresh virtual environment:
+
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Configure environment variables
-The project automatically loads `.env` via [`python-dotenv`](https://github.com/theskumar/python-dotenv).
-Fill in the sample `.env` with your own credentials:
+If you plan to use the Mistral local backend, install the companion inference package as well:
 
-- `OPENAI_API_KEY`, `MISTRAL_API_TOKEN`
-- `HF_API_TOKEN` (used for gated HuggingFace downloads)
-- `OPENROUTER_API_KEY` (plus optional `OPENROUTER_BASE_URL`, `OPENROUTER_SITE_URL`, `OPENROUTER_APP_NAME`)
-- Model choices such as `PRIMARY_MODEL_NAME`, `VISUAL_MODEL_NAME`, and `DEALOG_SUMMARIZER_MODEL`
-- Local backend knobs:
-  - `DEALOG_LLM_BACKEND=local` to force local Transformers inference (`auto` will choose local when no API key is set and a local model path is available)
-  - `PRIMARY_MODEL_PATH` / `DEALOG_SUMMARIZER_MODEL_PATH` (supports HuggingFace cache roots like `.../models--org--name` and auto-selects the latest snapshot)
-  - Optional GPU pinning for all DeALoG scripts: `DEALOG_CUDA_VISIBLE_DEVICES` (comma-separated ids, e.g., `0,2,3`)
-- `TMPDIR=/mnt/achakr40` to keep runtime temp files under `/mnt/achakr40`
-- Visual stack:
-  - `VISUAL_CAPTION_MODEL` / `VISUAL_CAPTION_MODEL_PATH` (local BLIP‑2 directory)
-  - `VISUAL_OCR_ENGINE` / `VISUAL_OCR_MODEL_DIR` (PaddleOCR cache folder)
-
-### Prepare Mistral model
-Clone the official inference repository and install its Python package:
 ```bash
 scripts/setup_mistral_inference.sh
 ```
 
-### Use OpenAI API
-Install the `openai` package (already listed in `requirements.txt`) and set
-your API key:
+### Environment configuration
+
+This repository loads environment variables automatically via `python-dotenv`. Create a local `.env` file in the repository root and set only the variables relevant to your setup.
+
+Minimal API-based configuration:
+
 ```bash
-export OPENAI_API_KEY=<your-key>
+OPENAI_API_KEY=<your-key>
+PRIMARY_MODEL_NAME=<model-id>
+DEALOG_SUMMARIZER_MODEL=<model-id>
 ```
 
-### Use OpenRouter API
-If you prefer routing calls through OpenRouter, export your key (or set it in
-`.env`):
-```bash
-export OPENROUTER_API_KEY=<your-openrouter-key>
-```
-You can also override `OPENROUTER_BASE_URL` when hosting a proxy.
-DeALoG’s summarizer/verifier pipeline relies on this credential (or `OPENAI_API_KEY`)
-to call the backing LLM; without it the agent falls back to a heuristic that may be
-less accurate.
+Minimal OpenRouter configuration:
 
-### Use local Transformers backend
-To run summarizer/verifier with local checkpoints instead of OpenRouter:
 ```bash
-export DEALOG_LLM_BACKEND=local
-export PRIMARY_MODEL_PATH=/path/to/models--org--name
-export DEALOG_SUMMARIZER_MODEL_PATH=/path/to/models--org--name
-```
-If you point to a HuggingFace cache root (`models--org--name`), the client
-automatically resolves the newest entry under `snapshots/`.
-
-Run the pipeline with any supported OpenAI model, e.g. `gpt-3.5-turbo`:
-```bash
-python main.py --dataset tatqa --llm gpt-3.5-turbo
+OPENROUTER_API_KEY=<your-key>
+PRIMARY_MODEL_NAME=<model-id>
+DEALOG_SUMMARIZER_MODEL=<model-id>
 ```
 
+Minimal local-checkpoint configuration:
 
-## Run Inference
 ```bash
-python main.py --dataset tatqa --llm mistral-7b --visual-caption-model Salesforce/blip2-flan-t5-xl
-# CRT-QA sample
-python main.py --dataset crtqa --llm ${PRIMARY_MODEL_NAME} --visual-ocr-engine PaddleOCR
-# Synthetic multi-hop split
-python main.py --dataset multi_hop --llm mistral-7b --visual-caption-path ./models/blip2_flan_t5_xl
-# Limit to 20 FinQA examples
-python main.py --dataset finqa --llm ${PRIMARY_MODEL_NAME} --limit 20
+DEALOG_LLM_BACKEND=local
+PRIMARY_MODEL_PATH=/path/to/models--org--name
+DEALOG_SUMMARIZER_MODEL_PATH=/path/to/models--org--name
+PRIMARY_MODEL_NAME=<label-for-outputs>
+DEALOG_SUMMARIZER_MODEL=<label-for-outputs>
 ```
 
-To collect richer metrics (accuracy + per-example traces) for DeALoG and plug them
-into the benchmarking harness:
+Common optional variables:
+
+- `DEALOG_CUDA_VISIBLE_DEVICES=0,1` to pin evaluation jobs to selected GPUs.
+- `VISUAL_CAPTION_MODEL` and `VISUAL_CAPTION_MODEL_PATH` for BLIP-2 captioning.
+- `VISUAL_OCR_ENGINE` and `VISUAL_OCR_MODEL_DIR` for OCR-backed visual parsing.
+- `HF_API_TOKEN` for gated HuggingFace downloads.
+- `TMPDIR=/path/to/tmp` if your cluster requires a custom temporary directory.
+
+If `PRIMARY_MODEL_PATH` or `DEALOG_SUMMARIZER_MODEL_PATH` points to a HuggingFace cache root of the form `models--org--name`, the loader automatically resolves the newest checkpoint under `snapshots/`.
+
+### Data layout
+
+The benchmark loader expects dataset files under `data/<DatasetName>/`. The repository already includes the CRT-QA and synthetic multi-hop resources used by the paper-style long-horizon experiments:
+
+- `data/CRTQA/crtqa_{train,dev,test}.json`
+- `data/multi_hop_synthetic/multi_hop_{train,dev,test}.json`
+
+Additional datasets should be placed as flat JSON or JSONL splits under the corresponding directory, for example:
+
+- `data/TATQA/tatqa_dataset_dev.json`
+- `data/FinQA/dev.json`
+- `data/WikiTQ/dev.json`
+- `data/FeTaQA/dev.json`
+
+## Running DeALoG
+
+For a quick end-to-end smoke test, run the main entry point on a small slice of a dataset:
+
+```bash
+python main.py \
+  --dataset crtqa \
+  --split dev \
+  --llm ${PRIMARY_MODEL_NAME} \
+  --limit 20
+```
+
+This command prints per-example predictions to stdout and is useful for confirming that model credentials, dataset loading, and agent coordination are functioning correctly.
+
+For a full evaluation run that writes machine-readable metrics and per-example traces, use:
+
 ```bash
 python scripts/run_dealog.py \
-  --dataset tatqa --split dev --llm ${PRIMARY_MODEL_NAME} \
-  --results-file /mnt/achakr40/dealog_tatqa.json \
-  --visual-caption-model ${VISUAL_CAPTION_MODEL} \
-  --visual-caption-path ${VISUAL_CAPTION_MODEL_PATH} \
-  --visual-ocr-engine ${VISUAL_OCR_ENGINE} \
-  --visual-ocr-model-dir ${VISUAL_OCR_MODEL_DIR}
+  --dataset crtqa \
+  --split dev \
+  --llm ${PRIMARY_MODEL_NAME} \
+  --summarizer-llm ${DEALOG_SUMMARIZER_MODEL} \
+  --results-file benchmarks/results/crtqa_dev_dealog.json
 ```
 
-## Fine-tune
-```bash
-python lora_finetune.py --model mistralai/Mistral-7B-v0.1
-```
+Important optional flags:
 
-## Evaluate
-```bash
-python evaluate.py lora_mistral --split dev
-```
+- `--limit 20` for a smoke test.
+- `--max-rounds 10` to match the long-horizon setting used in the paper-facing experiments.
+- `--min-chain-len` and `--max-chain-len` to evaluate only selected multi-hop subsets.
+- `--parallel-retrieval` to enable the retrieval micro-benchmark mode.
 
-## Benchmark Planners
+The JSON output contains aggregate metrics (`accuracy`, `latency_sec`, `num_examples`) and a `per_example` list with predictions, references, rationales, and shared-log traces.
 
-Use `configs/planner_benchmarks.yaml` to describe dataset splits and planner baselines
-(CoT, ReAct, ReWOO, planner-based agent, and DeALoG across LLaMA‑3 8B/70B, Mistral 7B/24B,
-and Qwen‑3 Medium/Large). Run the matrix—optionally in parallel—via:
+## Evaluation
+
+### Reproducing a single dataset result
+
+The simplest paper-style evaluation path is `scripts/run_dealog.py`. For example, to evaluate the synthetic long-horizon subset with 7-8 operator steps:
 
 ```bash
-# Preview commands
-python scripts/run_benchmark_matrix.py --dry-run
-
-# Execute with max concurrency (defaults to CPU count)
-python scripts/run_benchmark_matrix.py --max-workers 6
+python scripts/run_dealog.py \
+  --dataset multi_hop \
+  --split dev \
+  --llm ${PRIMARY_MODEL_NAME} \
+  --summarizer-llm ${DEALOG_SUMMARIZER_MODEL} \
+  --min-chain-len 7 \
+  --max-chain-len 8 \
+  --max-rounds 10 \
+  --results-file benchmarks/results/multihop_7_8_dev.json
 ```
 
-Each YAML entry can override command templates, decoding hyper-parameters, models, and
-environment variables so you can plug in custom planner implementations. The runner writes
-logs to `benchmarks/results/<timestamp>/logs` and expects every command to emit a JSON
-metrics file (path provided through `{metrics_path}` and the `BENCHMARK_METRICS_FILE`
-environment variable). Populate the JSON with fields like `accuracy`, `per_example`,
-`calls`, `tokens`, `latency_sec`, and `api_cost` so downstream analysis can mirror the
-paper’s reporting.
+### Reproducing the long-horizon DeALoG table
 
-After the runs finish, compute accuracy deltas, bootstrap 95 % CIs, and paired permutation
-tests relative to the matched backbone’s CoT baseline:
-
-```bash
-python scripts/analyze_benchmarks.py benchmarks/results/<run>/results.jsonl --baseline cot
-```
-
-The script emits a Markdown table summarising dataset/backbone/system values—including the
-latency and cost columns shown in Table 6 of the paper.
-
-Reference drivers for the matrix live in `baselines/run_{cot,react,rewoo,planner}.py`
-and `scripts/run_dealog.py`; feel free to swap them out with your full implementations
-once you are ready to benchmark real LLM calls.
-
-### Long-horizon Table-6 style run (+8192-token ablation)
-
-Use the dedicated runner to reproduce the CRT-QA / Multi-Hop rows and add an
-`8192` summarizer-token ablation column:
+To reproduce the CRT-QA and Multi-Hop rows together, along with the `8192`-token summarizer ablation, run:
 
 ```bash
 python scripts/run_table6_long_horizon.py \
   --llm ${PRIMARY_MODEL_NAME} \
   --summarizer-llm ${DEALOG_SUMMARIZER_MODEL} \
+  --split dev \
   --base-max-tokens 256 \
   --ablation-max-tokens 8192 \
   --max-rounds 10 \
   --output-dir benchmarks/results/table6_long_horizon
 ```
 
-To pin this run to selected GPUs via `.env`, set:
-`DEALOG_CUDA_VISIBLE_DEVICES=0,2,3`
+This script writes:
 
-It writes:
-- `benchmarks/results/table6_long_horizon/table6_long_horizon.md`
 - `benchmarks/results/table6_long_horizon/table6_long_horizon.json`
+- `benchmarks/results/table6_long_horizon/table6_long_horizon.md`
 
-Required datasets for all rows:
-- `data/CRTQA/crtqa_{train,dev,test}.json`
-- `data/multi_hop_synthetic/multi_hop_{train,dev,test}.json`
+The Markdown file is formatted as a paper-ready summary table; the JSON file contains the underlying row-level metrics for each task and ablation setting.
 
-### Table-6 aligned baseline runs (CoT / ReAct / ReWOO / Planner)
+### Reproducing Table-6 aligned baselines
 
-Use the baseline runner below to evaluate the same rows (`CRT-QA`, `Multi-Hop 5–6`,
-`Multi-Hop 7–8`, `All`) for one or more baseline systems:
+To compare DeALoG against CoT, ReAct, ReWOO, and planner-style baselines on the same CRT-QA and Multi-Hop slices:
 
 ```bash
 python scripts/run_table6_baselines.py \
   --llm ${PRIMARY_MODEL_NAME} \
-  --systems cot,react,rewoo,planner,planner_replan \
+  --systems cot,react,rewoo,planner,planner_replan,dealog \
   --split dev \
+  --max-rounds 10 \
+  --summarizer-llm ${DEALOG_SUMMARIZER_MODEL} \
   --output-dir benchmarks/results/table6_baselines
 ```
 
-To pin this run to selected GPUs via `.env`, set:
-`DEALOG_CUDA_VISIBLE_DEVICES=0,2,3`
+Useful options:
 
-Optional flags:
-- `--limit 20` for a quick smoke run.
-- `--systems ... ,dealog` to include DeALoG in the same table.
-- `--decoding '{"temperature":0.2,"max_new_tokens":512}'` for non-CoT baselines.
+- `--limit 20` for a smoke test.
+- `--decoding '{"temperature":0.2,"max_new_tokens":512}'` to override decoding for non-CoT baselines.
+- `--cot-max-new-tokens 256` and `--cot-temperature 0.2` to align baseline decoding settings across runs.
 
-### Visual caption & OCR models
-BLIP-2 FLAN-T5-XL weights are mirrored under `models/blip2_flan_t5_xl/`. PaddleOCR
-assets (detector/recognizer/classifier) live under `models/paddleocr_cache/`.
-Update `.env` if you relocate these folders or switch to different checkpoints.
+Outputs:
+
+- `benchmarks/results/table6_baselines/table6_baselines.json`
+- `benchmarks/results/table6_baselines/table6_baselines.md`
+- Per-system raw metric files under `benchmarks/results/table6_baselines/raw/`
+
+### Running the full benchmark matrix
+
+The broader experimental matrix is configured through `configs/planner_benchmarks.yaml`. To inspect the commands without launching jobs:
+
+```bash
+python scripts/run_benchmark_matrix.py --dry-run
+```
+
+To execute the configured matrix:
+
+```bash
+python scripts/run_benchmark_matrix.py --max-workers 6
+```
+
+Each configured run is expected to emit a JSON metrics file containing at least:
+
+- `accuracy`
+- `per_example`
+- `latency_sec`
+- `calls`
+- `tokens`
+- `api_cost`
+
+The runner stores execution logs under `benchmarks/results/<timestamp>/logs` and aggregates the metric file paths in `results.jsonl`.
+
+To compute deltas, bootstrap confidence intervals, and paired permutation tests relative to a CoT baseline:
+
+```bash
+python scripts/analyze_benchmarks.py benchmarks/results/<run>/results.jsonl --baseline cot
+```
+
+### FeTaQA factuality protocol
+
+For the FeTaQA factuality experiments, including QAGS, BERTScore, log-groundedness, and the associated reporting workflow, use the dedicated note:
+
+- [docs/fetaqa_faithfulness.md](docs/fetaqa_faithfulness.md)
+
+### Legacy fine-tuning path
+
+The repository also includes an earlier LoRA fine-tuning and evaluation path:
+
+```bash
+python lora_finetune.py --model mistralai/Mistral-7B-v0.1
+python evaluate.py /path/to/fine_tuned_checkpoint --split dev
+```
+
+This path evaluates a fine-tuned causal LM on TAT-QA and is separate from the multi-agent DeALoG evaluation scripts above.
+
+## Visual models
+
+If you run the visual pipeline, set the captioning and OCR checkpoints through `.env` or CLI flags:
+
+- `VISUAL_CAPTION_MODEL` / `VISUAL_CAPTION_MODEL_PATH`
+- `VISUAL_OCR_ENGINE` / `VISUAL_OCR_MODEL_DIR`
+
+The current repository layout assumes BLIP-2 assets under `models/blip2_flan_t5_xl/` and PaddleOCR assets under `models/paddleocr_cache/`, but these paths are configurable.
