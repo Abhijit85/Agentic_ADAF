@@ -88,11 +88,17 @@ If you plan to use the Mistral local backend, install the companion inference pa
 scripts/setup_mistral_inference.sh
 ```
 
-### Environment configuration
+### Use OpenAI API
+Install the `openai` package (already listed in `requirements.txt`) and set
+your API key:
+```bash
+export OPENAI_API_KEY=<your-key>
+```
+Run the pipeline with any supported OpenAI model, e.g. `gpt-3.5-turbo`:
+```bash
+python main.py --dataset tatqa --llm gpt-3.5-turbo
+```
 
-This repository loads environment variables automatically via `python-dotenv`. Create a local `.env` file in the repository root and set only the variables relevant to your setup.
-
-Minimal API-based configuration:
 
 ```bash
 OPENAI_API_KEY=<your-key>
