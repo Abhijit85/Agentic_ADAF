@@ -1,0 +1,57 @@
+{
+  "rows": [
+    {
+      "category": "scale_unit",
+      "label": "Scale/unit mismatch",
+      "N": 1,
+      "base_pct": 0.0,
+      "calc_pct": 0.0,
+      "delta": 0.0
+    },
+    {
+      "category": "arithmetic",
+      "label": "Multi-step arithmetic",
+      "N": 0,
+      "base_pct": null,
+      "calc_pct": null,
+      "delta": null
+    },
+    {
+      "category": "row_col",
+      "label": "Row/col misalignment",
+      "N": 0,
+      "base_pct": null,
+      "calc_pct": null,
+      "delta": null
+    },
+    {
+      "category": "retrieval",
+      "label": "Evidence retrieval miss",
+      "N": 0,
+      "base_pct": null,
+      "calc_pct": null,
+      "delta": null
+    },
+    {
+      "category": "verif_false_accept",
+      "label": "Verification false-accept",
+      "N": 0,
+      "base_pct": null,
+      "calc_pct": null,
+      "delta": null
+    },
+    {
+      "category": "other",
+      "label": "Other (parsing, OCR)",
+      "N": 0,
+      "base_pct": null,
+      "calc_pct": null,
+      "delta": null
+    }
+  ],
+  "total_N": 1,
+  "overall_base_pct": 0.0,
+  "overall_calc_pct": 0.0,
+  "missing_in_base_file": [],
+  "missing_in_calc_file": []
+}

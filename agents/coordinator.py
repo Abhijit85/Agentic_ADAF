@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional, List
+import re
 
 from .calculation_agent import CalculationAgent
 from .context_agent import ContextAgent
@@ -36,10 +37,16 @@ class AdaptiveOrchestrator:
         scheduler_model_path: str | None = None,
         scheduler_threshold: float = 0.4,
         parallel_retrieval: bool = False,
+        enable_calculator: bool = True,
+        controller_mode: str = "deterministic",
+        controller_model_name: str | None = None,
+        controller_temperature: float = 0.0,
+        controller_max_tokens: int = 64,
     ) -> None:
         self.table_agent = TableAgent(model_name)
         self.context_agent = ContextAgent(model_name)
         self.calc_agent = CalculationAgent()
+        self.enable_calculator = enable_calculator
         self.visual_agent = VisualAgent(
             visual_model_name or model_name,
             caption_model_name=visual_caption_model or visual_model_name or model_name,
@@ -62,6 +69,15 @@ class AdaptiveOrchestrator:
             model_path=scheduler_model_path, threshold=scheduler_threshold
         )
         self._parallel_retrieval = parallel_retrieval
+        self._controller_mode = controller_mode.strip().lower()
+        self._controller_model_name = controller_model_name or summarizer_model_name or model_name
+        self._controller_temperature = controller_temperature
+        self._controller_max_tokens = controller_max_tokens
+        self._controller_llm = (
+            LLMClient(default_model=self._controller_model_name)
+            if self._controller_mode == "llm"
+            else None
+        )
 
     def _table_operation(self, sample: Dict[str, Any]) -> str:
         return (
@@ -93,6 +109,122 @@ class AdaptiveOrchestrator:
             operator_chain=sample.get("operator_chain"),
             base_value=sample.get("base_value"),
         )
+
+    def _available_actions(self, log: SharedLog) -> List[str]:
+        actions: List[str] = []
+        if log.has_pending("context"):
+            actions.append("context")
+        if log.has_pending("table"):
+            actions.append("table")
+        if self.enable_calculator and log.has_pending("calculation"):
+            actions.append("calculation")
+        if log.has_pending("visual"):
+            actions.append("visual")
+        actions.append("stop")
+        return actions
+
+    def _truncate_for_controller(self, value: Any, limit: int = 220) -> str:
+        text = str(value).strip().replace('\n', ' ')
+        if len(text) <= limit:
+            return text
+        return text[: limit - 3] + "..."
+    def _controller_prompt(self, question: str, log: SharedLog, round_idx: int) -> str:
+        actions = self._available_actions(log)
+        last_entries = log.entries()[-8:]
+        history_lines = []
+        for idx, entry in enumerate(last_entries, start=1):
+            history_lines.append(
+                f"{idx}. {entry.agent} | {entry.type} | {self._truncate_for_controller(entry.content)}"
+            )
+        history = "\n".join(history_lines) if history_lines else "(empty)"
+        pending = ", ".join(sorted(set(log.pending_needs()))) or "none"
+        return (
+            "You are the control unit for a table-QA multi-agent system.\n"
+            "Choose exactly one next action based on the question, pending needs, and shared log.\n"
+            + "Valid actions are: " + ", ".join(actions) + "\n"
+            + "Return exactly one line in this format: ACTION: <action>\n"
+            + "Do not explain your reasoning.\n\n"
+            + f"Round: {round_idx}\n"
+            + f"Question: {question}\n"
+            + f"Pending needs: {pending}\n"
+            + f"Recent log:\n{history}\n"
+        )
+    def _extract_controller_action(self, content: str, valid_actions: List[str]) -> Optional[str]:
+        match = re.search(r"action\s*:\s*([a-z_]+)", content, flags=re.IGNORECASE)
+        candidate = match.group(1).lower() if match else content.strip().lower().split()[0] if content.strip() else ""
+        for action in valid_actions:
+            if candidate == action:
+                return action
+        for action in valid_actions:
+            if re.search(rf"\b{re.escape(action)}\b", content, flags=re.IGNORECASE):
+                return action
+        return None
+
+    def _llm_choose_action(self, question: str, log: SharedLog, round_idx: int) -> Dict[str, Any]:
+        assert self._controller_llm is not None
+        actions = self._available_actions(log)
+        prompt = self._controller_prompt(question, log, round_idx)
+        result = self._controller_llm.complete(
+            prompt,
+            model=self._controller_model_name,
+            temperature=self._controller_temperature,
+            max_tokens=self._controller_max_tokens,
+        )
+        content = str((result or {}).get("content") or "").strip()
+        action = self._extract_controller_action(content, actions)
+        fallback = False
+        if action is None:
+            fallback = True
+            non_stop = [item for item in actions if item != "stop"]
+            action = non_stop[0] if non_stop else "stop"
+        return {
+            "action": action,
+            "raw": content,
+            "fallback": fallback,
+            "valid_actions": actions,
+        }
+
+    def _invoke_action(self, action: str, log: SharedLog, sample: Dict[str, Any], question: str) -> bool:
+        if action == "context" and log.has_pending("context"):
+            context = self.context_agent.fetch_relevant_text(question, sample.get("paragraphs"))
+            log.append(
+                "context_agent",
+                "context",
+                context,
+                metadata={"source": "paragraphs"},
+                resolves=["context"],
+            )
+            return True
+        if action == "table" and log.has_pending("table"):
+            table_result = self._table_op(sample)
+            log.append(
+                "table_agent",
+                "table",
+                table_result,
+                metadata={"operation": self._table_operation(sample)},
+                resolves=["table"],
+            )
+            return True
+        if action == "calculation" and self.enable_calculator and log.has_pending("calculation"):
+            calc_result = self._calc_op(sample, question)
+            log.append(
+                "calculation_agent",
+                "calculation",
+                calc_result,
+                metadata={"expression": self._calc_expression(sample)},
+                resolves=["calculation"],
+            )
+            return True
+        if action == "visual" and log.has_pending("visual"):
+            visual_summary = self.visual_agent.describe(sample.get("visuals"))
+            log.append(
+                "visual_agent",
+                "visual",
+                visual_summary,
+                resolves=["visual"],
+            )
+            return True
+        return False
 
     def _append_retrieval(
         self,
@@ -172,7 +304,23 @@ class AdaptiveOrchestrator:
             progress = False
             retrieval_start = time.perf_counter()
 
-            if self._parallel_retrieval:
+            if self._controller_mode == "llm":
+                decision = self._llm_choose_action(question, log, round_idx)
+                chosen_action = decision["action"]
+                log.append(
+                    "controller",
+                    "llm_controller_decision",
+                    {
+                        "round": round_idx,
+                        "action": chosen_action,
+                        "fallback": decision["fallback"],
+                        "valid_actions": decision["valid_actions"],
+                        "raw": decision["raw"],
+                    },
+                )
+                if chosen_action != "stop":
+                    progress = self._invoke_action(chosen_action, log, sample, question)
+            elif self._parallel_retrieval:
                 futures: Tuple = ()
                 with ThreadPoolExecutor(max_workers=3) as executor:
                     futures = []
@@ -196,7 +344,7 @@ class AdaptiveOrchestrator:
                                 executor.submit(self._table_op, sample),
                             )
                         )
-                    if log.has_pending("calculation"):
+                    if self.enable_calculator and log.has_pending("calculation"):
                         futures.append(
                             (
                                 "calculation_agent",
@@ -242,7 +390,7 @@ class AdaptiveOrchestrator:
                     )
                     progress = True
 
-                if log.has_pending("calculation"):
+                if self.enable_calculator and log.has_pending("calculation"):
                     calc_result = self._calc_op(sample, question)
                     log.append(
                         "calculation_agent",
@@ -276,45 +424,46 @@ class AdaptiveOrchestrator:
 
             delta_entries = len(log.entries()) - previous_entries
             delta_pending = len(log.pending_needs()) - previous_pending
-            summarizer_entry = log.latest("summary")
-            summarizer_conf = (
-                summarizer_entry.metadata.get("confidence")
-                if summarizer_entry and summarizer_entry.metadata
-                else 0.5
-            )
-            image_present = bool(sample.get("visuals"))
-
-            score_features = [
-                int(image_present),
-                float(summarizer_conf or 0.5),
-                float(delta_entries),
-                float(delta_pending),
-            ]
-            continue_score = self._scheduler.score(score_features)
-
-            log.append(
-                "controller",
-                "scheduler_decision",
-                {
-                    "round": round_idx,
-                    "score": round(continue_score, 4),
-                    "threshold": self._scheduler.threshold,
-                    "features": {
-                        "image_present": image_present,
-                        "summarizer_conf": summarizer_conf,
-                        "delta_entries": delta_entries,
-                        "delta_pending": delta_pending,
-                    },
-                },
-            )
-
             previous_entries = len(log.entries())
             previous_pending = len(log.pending_needs())
 
             if not progress or not any(log.pending_needs()):
                 break
-            if not self._scheduler.should_continue(score_features):
-                break
+
+            if self._controller_mode != "llm":
+                summarizer_entry = log.latest("summary")
+                summarizer_conf = (
+                    summarizer_entry.metadata.get("confidence")
+                    if summarizer_entry and summarizer_entry.metadata
+                    else 0.5
+                )
+                image_present = bool(sample.get("visuals"))
+
+                score_features = [
+                    int(image_present),
+                    float(summarizer_conf or 0.5),
+                    float(delta_entries),
+                    float(delta_pending),
+                ]
+                continue_score = self._scheduler.score(score_features)
+
+                log.append(
+                    "controller",
+                    "scheduler_decision",
+                    {
+                        "round": round_idx,
+                        "score": round(continue_score, 4),
+                        "threshold": self._scheduler.threshold,
+                        "features": {
+                            "image_present": image_present,
+                            "summarizer_conf": summarizer_conf,
+                            "delta_entries": delta_entries,
+                            "delta_pending": delta_pending,
+                        },
+                    },
+                )
+                if not self._scheduler.should_continue(score_features):
+                    break
 
         # Request a summary and final verification if not already satisfied
         log.append(

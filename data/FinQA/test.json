@@ -1,0 +1,77 @@
+[
+  {
+    "id": "finqa-dev-005",
+    "question": "What was the revenue reported in 2020?",
+    "answer": "125",
+    "table": [
+      [
+        "Year",
+        "Revenue",
+        "Profit"
+      ],
+      [
+        "2019",
+        115,
+        25
+      ],
+      [
+        "2020",
+        125,
+        30
+      ]
+    ],
+    "paragraphs": [
+      "In 2020 the company reported revenue of 125 million dollars."
+    ]
+  },
+  {
+    "id": "finqa-dev-014",
+    "question": "What was the revenue reported in 2020?",
+    "answer": "170",
+    "table": [
+      [
+        "Year",
+        "Revenue",
+        "Profit"
+      ],
+      [
+        "2019",
+        160,
+        34
+      ],
+      [
+        "2020",
+        170,
+        39
+      ]
+    ],
+    "paragraphs": [
+      "In 2020 the company reported revenue of 170 million dollars."
+    ]
+  },
+  {
+    "id": "finqa-dev-019",
+    "question": "What was the revenue reported in 2019?",
+    "answer": "195",
+    "table": [
+      [
+        "Year",
+        "Revenue",
+        "Profit"
+      ],
+      [
+        "2018",
+        185,
+        39
+      ],
+      [
+        "2019",
+        195,
+        44
+      ]
+    ],
+    "paragraphs": [
+      "In 2019 the company reported revenue of 195 million dollars."
+    ]
+  }
+]

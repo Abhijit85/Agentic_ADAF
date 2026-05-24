@@ -73,10 +73,11 @@ class VerificationAgent:
         if verdict is not None:
             return verdict
 
-        raise RuntimeError(
-            "Verification LLM response missing verdict after retry. "
-            f"first={content!r} retry={retry_content!r}"
-        )
+        heuristic_verdict = self._heuristic_verdict(candidate_text, reference_text)
+        if heuristic_verdict is not None:
+            return heuristic_verdict
+
+        return False
 
     def _complete_text(self, prompt: str) -> str:
         result = self._llm.complete(
@@ -95,14 +96,44 @@ class VerificationAgent:
             return match.group(1).lower() == "true"
 
         token = content.strip().lower()
-        if token in {"true", "false"}:
-            return token == "true"
+        if token in {"true", "false", "yes", "no"}:
+            return token in {"true", "yes"}
+
+        # Some local models ignore formatting instructions and emit a short explanation.
+        # Prefer explicit boolean words near the start or end instead of requiring VERDICT:.
+        word_matches = re.findall(r"(true|false|yes|no|correct|incorrect)", token)
+        if word_matches:
+            first = word_matches[0]
+            if first in {"true", "yes", "correct"}:
+                return True
+            if first in {"false", "no", "incorrect"}:
+                return False
         return None
 
     def _normalise_text(self, value: Any) -> str:
         if value is None:
             return ""
         return str(value).strip().lower()
+
+    def _heuristic_verdict(self, candidate: str, reference: str) -> Optional[bool]:
+        if not candidate or not reference:
+            return False
+        if candidate in reference or reference in candidate:
+            return True
+
+        cand_tokens = set(re.findall(r"\w+", candidate))
+        ref_tokens = set(re.findall(r"\w+", reference))
+        if not cand_tokens or not ref_tokens:
+            return False
+
+        overlap = len(cand_tokens & ref_tokens)
+        precision = overlap / max(1, len(cand_tokens))
+        recall = overlap / max(1, len(ref_tokens))
+        if precision >= 0.8 and overlap >= 2:
+            return True
+        if precision <= 0.2 and recall <= 0.2:
+            return False
+        return None
 
     def _numeric_verdict(self, candidate: str, reference: str) -> Optional[bool]:
         """Return numeric verdict when both sides contain at least one number."""

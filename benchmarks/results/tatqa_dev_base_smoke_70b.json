@@ -1,0 +1,170 @@
+{
+  "dataset": "tatqa",
+  "split": "dev",
+  "model": "meta-llama/Llama-3.3-70B-Instruct",
+  "accuracy": 0.0,
+  "num_examples": 1,
+  "latency_sec": 93.158,
+  "calls": null,
+  "tokens": null,
+  "api_cost": null,
+  "per_example": [
+    {
+      "id": "tatqa-dev-0",
+      "question": "What is the company paid on a cost-plus type contract?",
+      "prediction": "Answer",
+      "reference": [
+        "our allowable incurred costs plus a profit which can be fixed or variable depending on the contract\u2019s fee arrangement up to predetermined funding levels determined by the customer"
+      ],
+      "rationale": "Question: What is the company paid on a cost-plus type contract? \nContext: On a fixed-price type contract, we agree to perform the contractual statement of work for a predetermined sales price. On a cost-plus type contract, we are paid our allowable incurred costs plus a profit which can be fixed or variable depending on the contract\u2019s fee arrangement up to predetermined funding levels determined by the customer. On a time-and-material type contract, we are paid on the basis of direct labor hours expended at specified fixed-price hourly rates (that include wages, overhead, allowable general and administrative expenses and profit) and materials at cost. The table below presents total net sales disaggregated by contract type (in millions): \nTable insight: [['', '', 'Years Ended September 30,', ''], ['', '2019', '2018', '2017'], ['Fixed Price', '$  1,452.4', '$  1,146.2', '$  1,036.9'], ['Other', '44.1', '56.7', '70.8'], ['Total sales', '$1,496.5', '$1,202.9', '$1,107.7']]",
+      "log": [
+        {
+          "agent": "controller",
+          "type": "question",
+          "content": "What is the company paid on a cost-plus type contract?",
+          "metadata": {
+            "sample_id": null
+          },
+          "needs": [
+            "context",
+            "table",
+            "calculation"
+          ],
+          "resolves": []
+        },
+        {
+          "agent": "context_agent",
+          "type": "context",
+          "content": "On a fixed-price type contract, we agree to perform the contractual statement of work for a predetermined sales price. On a cost-plus type contract, we are paid our allowable incurred costs plus a profit which can be fixed or variable depending on the contract\u2019s fee arrangement up to predetermined funding levels determined by the customer. On a time-and-material type contract, we are paid on the basis of direct labor hours expended at specified fixed-price hourly rates (that include wages, overhead, allowable general and administrative expenses and profit) and materials at cost. The table below presents total net sales disaggregated by contract type (in millions):",
+          "metadata": {
+            "source": "paragraphs"
+          },
+          "needs": [],
+          "resolves": [
+            "context"
+          ]
+        },
+        {
+          "agent": "table_agent",
+          "type": "table",
+          "content": [
+            [
+              "",
+              "",
+              "Years Ended September 30,",
+              ""
+            ],
+            [
+              "",
+              "2019",
+              "2018",
+              "2017"
+            ],
+            [
+              "Fixed Price",
+              "$  1,452.4",
+              "$  1,146.2",
+              "$  1,036.9"
+            ],
+            [
+              "Other",
+              "44.1",
+              "56.7",
+              "70.8"
+            ],
+            [
+              "Total sales",
+              "$1,496.5",
+              "$1,202.9",
+              "$1,107.7"
+            ]
+          ],
+          "metadata": {
+            "operation": "noop"
+          },
+          "needs": [],
+          "resolves": [
+            "table"
+          ]
+        },
+        {
+          "agent": "controller",
+          "type": "retrieval_round",
+          "content": {
+            "round": 0,
+            "parallel": false,
+            "retrieval_sec": 0.0
+          },
+          "metadata": {},
+          "needs": [],
+          "resolves": []
+        },
+        {
+          "agent": "controller",
+          "type": "scheduler_decision",
+          "content": {
+            "round": 0,
+            "score": 1.0,
+            "threshold": 0.4,
+            "features": {
+              "image_present": false,
+              "summarizer_conf": 0.5,
+              "delta_entries": 3,
+              "delta_pending": -2
+            }
+          },
+          "metadata": {},
+          "needs": [],
+          "resolves": []
+        },
+        {
+          "agent": "controller",
+          "type": "request_summary",
+          "content": "Synthesize final answer",
+          "metadata": {},
+          "needs": [
+            "summary"
+          ],
+          "resolves": []
+        },
+        {
+          "agent": "summarizer_agent",
+          "type": "summary",
+          "content": {
+            "answer": "Answer",
+            "rationale": "Question: What is the company paid on a cost-plus type contract? \nContext: On a fixed-price type contract, we agree to perform the contractual statement of work for a predetermined sales price. On a cost-plus type contract, we are paid our allowable incurred costs plus a profit which can be fixed or variable depending on the contract\u2019s fee arrangement up to predetermined funding levels determined by the customer. On a time-and-material type contract, we are paid on the basis of direct labor hours expended at specified fixed-price hourly rates (that include wages, overhead, allowable general and administrative expenses and profit) and materials at cost. The table below presents total net sales disaggregated by contract type (in millions): \nTable insight: [['', '', 'Years Ended September 30,', ''], ['', '2019', '2018', '2017'], ['Fixed Price', '$  1,452.4', '$  1,146.2', '$  1,036.9'], ['Other', '44.1', '56.7', '70.8'], ['Total sales', '$1,496.5', '$1,202.9', '$1,107.7']]",
+            "confidence": 0.8,
+            "prompt_tokens": 336,
+            "completion_tokens": 256
+          },
+          "metadata": {
+            "confidence": 0.8,
+            "prompt_tokens": 336,
+            "completion_tokens": 256
+          },
+          "needs": [
+            "verification"
+          ],
+          "resolves": [
+            "summary"
+          ]
+        },
+        {
+          "agent": "verification_agent",
+          "type": "verification",
+          "content": {
+            "verified": false,
+            "reference_available": true
+          },
+          "metadata": {},
+          "needs": [],
+          "resolves": [
+            "verification"
+          ]
+        }
+      ],
+      "correct": false,
+      "latency_sec": 93.15773039404303
+    }
+  ]
+}

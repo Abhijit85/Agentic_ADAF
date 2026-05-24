@@ -77,6 +77,11 @@ def run_dataset(
     scheduler_model: str | None,
     scheduler_threshold: float,
     parallel_retrieval: bool,
+    enable_calculator: bool = True,
+    controller_mode: str = "deterministic",
+    controller_model: str | None = None,
+    controller_temperature: float = 0.0,
+    controller_max_tokens: int = 64,
 ) -> Dict[str, Any]:
     # Apply limit after optional chain-length filtering so sliced subsets
     # (e.g., 7-8 hops) don't get emptied by early truncation.
@@ -111,12 +116,18 @@ def run_dataset(
         scheduler_model_path=scheduler_model,
         scheduler_threshold=scheduler_threshold,
         parallel_retrieval=parallel_retrieval,
+        enable_calculator=enable_calculator,
+        controller_mode=controller_mode,
+        controller_model_name=controller_model,
+        controller_temperature=controller_temperature,
+        controller_max_tokens=controller_max_tokens,
     )
 
     per_example: List[Dict[str, Any]] = []
     total_correct = 0
     total_latency = 0.0
 
+    total_examples = len(data)
     for idx, sample in enumerate(data):
         start = time.perf_counter()
         result = orchestrator.run(sample)
@@ -138,6 +149,10 @@ def run_dataset(
                 "correct": correct,
                 "latency_sec": latency,
             }
+        )
+        print(
+            f"[DeALoG] done {idx + 1}/{total_examples} "
+            f"(last_latency={latency:.3f}s)"
         )
 
     n = len(per_example)
@@ -196,6 +211,32 @@ def main() -> None:
     parser.add_argument("--scheduler-threshold", type=float, default=0.4, help="p(continue) threshold.")
     parser.add_argument("--parallel-retrieval", action="store_true", help="Enable parallel retrieval micro-benchmark mode.")
     parser.add_argument(
+        "--controller-mode",
+        choices=["deterministic", "llm"],
+        default="deterministic",
+        help="Control policy: original deterministic retrieval vs. LLM-chosen next agent.",
+    )
+    parser.add_argument(
+        "--controller-model",
+        default=None,
+        help="Model used for the LLM controller in --controller-mode llm (defaults to --summarizer-llm or --llm).",
+    )
+    parser.add_argument("--controller-temperature", type=float, default=0.0)
+    parser.add_argument("--controller-max-tokens", type=int, default=64)
+    parser.add_argument(
+        "--enable-calculator",
+        dest="enable_calculator",
+        action="store_true",
+        default=True,
+        help="Allow CalculationAgent to be scheduled (default).",
+    )
+    parser.add_argument(
+        "--disable-calculator",
+        dest="enable_calculator",
+        action="store_false",
+        help="Run DeALoG without the CalculationAgent.",
+    )
+    parser.add_argument(
         "--cuda-visible-devices",
         default=os.getenv("DEALOG_CUDA_VISIBLE_DEVICES"),
         help="Optional CUDA_VISIBLE_DEVICES value for this run (defaults to DEALOG_CUDA_VISIBLE_DEVICES).",
@@ -233,6 +274,11 @@ def main() -> None:
         scheduler_model=args.scheduler,
         scheduler_threshold=args.scheduler_threshold,
         parallel_retrieval=args.parallel_retrieval,
+        enable_calculator=args.enable_calculator,
+        controller_mode=args.controller_mode,
+        controller_model=args.controller_model,
+        controller_temperature=args.controller_temperature,
+        controller_max_tokens=args.controller_max_tokens,
     )
 
     args.results_file.parent.mkdir(parents=True, exist_ok=True)

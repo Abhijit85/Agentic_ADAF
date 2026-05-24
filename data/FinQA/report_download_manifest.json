@@ -1,0 +1,106 @@
+{
+  "downloaded": [
+    {
+      "ticker": "AAL",
+      "year": "2010",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/AAL_2010.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_AAL_2010.pdf"
+    },
+    {
+      "ticker": "AAL",
+      "year": "2013",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/AAL_2013.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_AAL_2013.pdf"
+    },
+    {
+      "ticker": "AAL",
+      "year": "2014",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/AAL_2014.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_AAL_2014.pdf"
+    },
+    {
+      "ticker": "AAL",
+      "year": "2015",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/AAL_2015.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_AAL_2015.pdf"
+    },
+    {
+      "ticker": "AAL",
+      "year": "2016",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/AAL_2016.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_AAL_2016.pdf"
+    },
+    {
+      "ticker": "AAPL",
+      "year": "2003",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/AAPL_2003.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_AAPL_2003.pdf"
+    },
+    {
+      "ticker": "AAPL",
+      "year": "2004",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/AAPL_2004.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_AAPL_2004.pdf"
+    },
+    {
+      "ticker": "AAPL",
+      "year": "2005",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/AAPL_2005.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_AAPL_2005.pdf"
+    },
+    {
+      "ticker": "AAPL",
+      "year": "2006",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/AAPL_2006.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_AAPL_2006.pdf"
+    },
+    {
+      "ticker": "ABMD",
+      "year": "2005",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/ABMD_2005.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_ABMD_2005.pdf"
+    },
+    {
+      "ticker": "ABMD",
+      "year": "2006",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/ABMD_2006.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_ABMD_2006.pdf"
+    },
+    {
+      "ticker": "ABMD",
+      "year": "2007",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/ABMD_2007.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_ABMD_2007.pdf"
+    },
+    {
+      "ticker": "ABMD",
+      "year": "2008",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/ABMD_2008.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_ABMD_2008.pdf"
+    },
+    {
+      "ticker": "ABMD",
+      "year": "2012",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/ABMD_2012.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_ABMD_2012.pdf"
+    },
+    {
+      "ticker": "ADBE",
+      "year": "1999",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/ADBE_1999.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_ADBE_1999.pdf"
+    },
+    {
+      "ticker": "ADBE",
+      "year": "2008",
+      "path": "/mnt/data1/achakr40/Agentic_ADAF/data/FinQA/reports/ADBE_2008.pdf",
+      "url": "https://www.annualreports.com/HostedData/AnnualReportArchive/a/NASDAQ_ADBE_2008.pdf"
+    }
+  ],
+  "missing": [
+    {
+      "ticker": "ABC",
+      "year": "2005"
+    }
+  ]
+}

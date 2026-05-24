@@ -94,9 +94,14 @@ your API key:
 ```bash
 export OPENAI_API_KEY=<your-key>
 ```
-Run the pipeline with any supported OpenAI model, e.g. `gpt-3.5-turbo`:
+Run the pipeline with the repo default from `.env`:
 ```bash
-python main.py --dataset tatqa --llm gpt-3.5-turbo
+python main.py --dataset tatqa
+```
+
+To override the default explicitly:
+```bash
+python main.py --dataset tatqa --llm meta-llama/Llama-3.3-70B-Instruct
 ```
 
 
@@ -118,10 +123,11 @@ Minimal local-checkpoint configuration:
 
 ```bash
 DEALOG_LLM_BACKEND=local
-PRIMARY_MODEL_PATH=/path/to/models--org--name
-DEALOG_SUMMARIZER_MODEL_PATH=/path/to/models--org--name
-PRIMARY_MODEL_NAME=<label-for-outputs>
-DEALOG_SUMMARIZER_MODEL=<label-for-outputs>
+PRIMARY_MODEL_PATH=/mnt/shared/shared_hf_home/hub/models--meta-llama--Llama-3.3-70B-Instruct
+DEALOG_SUMMARIZER_MODEL_PATH=/mnt/shared/shared_hf_home/hub/models--meta-llama--Llama-3.3-70B-Instruct
+LOCAL_LLM_MODEL_PATH=/mnt/shared/shared_hf_home/hub/models--meta-llama--Llama-3.3-70B-Instruct
+PRIMARY_MODEL_NAME=meta-llama/Llama-3.3-70B-Instruct
+DEALOG_SUMMARIZER_MODEL=meta-llama/Llama-3.3-70B-Instruct
 ```
 
 Common optional variables:
