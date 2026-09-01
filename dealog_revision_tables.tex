@@ -1,0 +1,257 @@
+% Standalone revision-table scaffold for the DeALOG rebuttal / revision pass.
+% This workspace does not currently contain the main AAAI paper source, so keep
+% these tables in a separate file and paste them into the paper source there.
+%
+% Preamble note:
+% \newcommand{\FILL}[1]{\textcolor{red}{\textbf{[#1]}}}
+% \newcommand{\EST}[1]{\textcolor{blue}{\textit{#1}}}
+%
+% In this file:
+% - \FILL{...} means unmeasured / still required.
+% - \EST{...} means drafting estimate only, not a measured result.
+
+% ============================================================================
+%  EXP 1 — DYNAMIC-ORDER ABLATION  (addresses Con 1 + Question 1: planner-free)
+% ----------------------------------------------------------------------------
+%  PROTOCOL
+%   Dataset:   MMQA (mirror on TAT-QA for the appendix).
+%   Corruption: structural/numeric, shared seeds, rates 0 / 30% (the panel can
+%               carry 10/20 too, but 0 vs 30 is enough to show the trend).
+%   Systems:
+%     - \method            : default fixed, non-semantic order.
+%     - Dynamic-Order (rule): keyword router skips agents (no table keyword ->
+%                             skip TableAgent; no "[Image]"/"figure" -> skip
+%                             VisualAgent; etc.). EVERYTHING ELSE IDENTICAL.
+%   DECISIVE COLUMN: "Skip-err %" = fraction of questions where the router
+%   skipped an agent that held gold evidence. Report at clean AND 30%.
+%   PREDICTED RESULT: Dynamic-Order ~= \method on Clean EM, but larger Rel.
+%   drop, and Skip-err % RISES with corruption (router fooled by noise) ->
+%   shows dynamic routing is a corruptible control surface.
+% ============================================================================
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{System} & \textbf{Clean} & \textbf{30\%} & \textbf{Rel.} & \textbf{Skip-err \%} \\
+                & \textbf{EM}    & \textbf{EM}   & \textbf{drop} & \textbf{(clean/30\%)} \\
+\midrule
+Dynamic-Order (rule) & \EST{68.8}  & \EST{50.5} & \EST{26.6\%} & \EST{6.5} / \EST{18.2} \\
+\rowcolor{lightgreen}
+\method{} (fixed)    & \EST{69.2}  & \EST{57.0} & \EST{17.6\%} & --- / --- \\
+\bottomrule
+\end{tabular}
+\caption{Fixed vs.\ dynamic agent ordering on the MMQA ablation subset
+(structural corruption, 5 shared seeds; slice differs from the main Table~7
+clean reference). \emph{Skip-err \%} is the fraction of questions whose router
+skipped an agent that held gold evidence; \method's order is non-semantic, so it
+makes no content-dependent skip decisions (``---''). The rule-based router matches
+\method{} on clean EM but degrades more under noise as its skip-error rate rises,
+showing that question-conditioned ordering reintroduces a corruptible control surface.
+Values shown here are drafting estimates only unless replaced by measured runs.}
+\label{tab:dynamic_order}
+\end{table}
+
+
+% ============================================================================
+%  EXP 2a — ACTIVE-REPAIR ABLATION  (addresses Con 2 + Question 2: verifier)
+% ----------------------------------------------------------------------------
+%  PROTOCOL
+%   Dataset: MMQA, structural corruption, shared seeds, rates 10 / 20 / 30%.
+%   Systems:
+%     - \method (safe fallback): default; on FLAG revert to pre-flag answer.
+%     - \method + active repair : on FLAG, verifier requests a targeted re-run
+%       from the flagged upstream agent with corrective instructions; accept
+%       the repaired answer if it changes. Fallback retained only if repair
+%       also flags. (Bound to 1 repair round.)
+%   DECISIVE COLUMNS: "Repaired OK %" vs "Repair harmful %". If harmful >=
+%   helpful under corruption, active repair is net-negative -> the safe
+%   fallback is a justified design choice, not a limitation.
+%   Also report Delta EM vs the fallback default (expected <= 0 at high corr.).
+% ============================================================================
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+\textbf{Corr.} & \textbf{Variant} & \textbf{Final} & \textbf{Rep.} & \textbf{Rep.} & \textbf{Rep.} & \textbf{$\Delta$EM} \\
+ & & \textbf{EM} & \textbf{att.\%} & \textbf{OK\%} & \textbf{harm\%} & \textbf{vs fb} \\
+\midrule
+\multirow{2}{*}{10\%}
+ & + active repair & \EST{64.7} & \EST{100} & \EST{22} & \EST{15} & \EST{-0.3} \\
+ & \cellcolor{lightgreen}safe fallback & \cellcolor{lightgreen}\EST{65.0} & \cellcolor{lightgreen}--- & \cellcolor{lightgreen}--- & \cellcolor{lightgreen}--- & \cellcolor{lightgreen}--- \\
+\midrule
+\multirow{2}{*}{20\%}
+ & + active repair & \EST{60.1} & \EST{100} & \EST{16} & \EST{19} & \EST{-0.9} \\
+ & \cellcolor{lightgreen}safe fallback & \cellcolor{lightgreen}\EST{61.0} & \cellcolor{lightgreen}--- & \cellcolor{lightgreen}--- & \cellcolor{lightgreen}--- & \cellcolor{lightgreen}--- \\
+\midrule
+\multirow{2}{*}{30\%}
+ & + active repair & \EST{54.8} & \EST{100} & \EST{11} & \EST{21} & \EST{-1.7} \\
+ & \cellcolor{lightgreen}safe fallback & \cellcolor{lightgreen}\EST{56.5} & \cellcolor{lightgreen}--- & \cellcolor{lightgreen}--- & \cellcolor{lightgreen}--- & \cellcolor{lightgreen}--- \\
+\bottomrule
+\end{tabular}
+\caption{Active repair vs.\ the safe-fallback default on the MMQA ablation
+subset (structural corruption, 5 shared seeds; slice differs from the main
+Table~21 clean reference). \emph{Rep.\ att./OK/harm} are the fraction of
+\textsc{Flag} events where a repair was attempted, fixed a wrong answer, and
+turned a correct answer wrong, respectively; $\Delta$EM is relative to the
+fallback default. When harmful repairs outnumber successful ones under
+corruption, the conservative fallback is the better operating point---answering
+why active repair is deliberately disabled rather than absent. Values shown here
+are drafting estimates only unless replaced by measured runs.}
+\label{tab:active_repair}
+\end{table}
+
+
+% ============================================================================
+%  EXP 2b — VLM VERIFIER INTEGRATED  (addresses Con 2: multimodal weakness)
+% ----------------------------------------------------------------------------
+%  PROTOCOL
+%   Promote the App. prototype into the main loop. Dataset: MMQA image subset
+%   (questions whose gold evidence includes an image) + MMQA full.
+%   Systems:
+%     - \method (text verifier): default; visual/OCR detection ~17.1%.
+%     - \method + VLM re-verify : flagged Visual entries re-checked against the
+%       ORIGINAL image (not the caption) by a VLM.
+%   DECISIVE COLUMN: Visual/OCR detection rate (expect a clear jump from 17.1%),
+%   with downstream MMQA-image EM gain and the latency cost made explicit.
+% ============================================================================
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Verifier} & \textbf{Vis/OCR} & \textbf{MMQA-img} & \textbf{MMQA-full} & \textbf{$\Delta$ Lat.} \\
+                  & \textbf{det.\%}  & \textbf{EM}       & \textbf{EM}        & \textbf{(s)} \\
+\midrule
+Text (default)            & 17.1 & \EST{49.8} & \EST{69.2} & --- \\
+\rowcolor{lightgreen}
++ VLM re-verify           & \EST{34.5} & \EST{53.1} & \EST{70.0} & \EST{+1.8} \\
+\bottomrule
+\end{tabular}
+\caption{Integrating the VLM re-verifier into the main loop on the MMQA
+ablation subset (5 shared seeds; slice differs from the main Table~7 clean
+reference). Re-checking flagged \textsc{Visual} entries against the original image
+rather than the caption raises the visual/OCR detection rate and the
+image-subset EM at a bounded latency cost, directly addressing the multimodal
+verification gap noted in Limitations. Values shown here are drafting estimates
+only unless replaced by measured runs.}
+\label{tab:vlm_integrated}
+\end{table}
+
+
+% ============================================================================
+%  EXP 3 — CRT-QA LONG-HORIZON STRATIFICATION  (addresses Con 3 + Question 3)
+% ----------------------------------------------------------------------------
+%  PROTOCOL
+%   Replace the n~25 MMQA-dev point estimate with large-sample evidence.
+%   Dataset: CRT-QA (1,000 examples, long chains, already in your eval).
+%   Stratify by operator-chain length: 2-3 / 4-5 / 6-7 / 8+. Report n per
+%   bucket. Systems: Planner, Plan->Log, \method (same as Table 7 bottom).
+%   DECISIVE FEATURE: large n per bucket + same flat-vs-collapse trend.
+%   Keep the operator-count definition identical to the MMQA long-horizon slice.
+% ============================================================================
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Chain len.} & \textbf{$n$} & \textbf{Planner} & \textbf{Plan$\to$Log} & \textbf{\method} \\
+\midrule
+2--3 Ops & \EST{180} & \EST{43.0} & \EST{48.5} & \EST{66.5} \\
+4--5 Ops & \EST{320} & \EST{34.5} & \EST{42.0} & \EST{63.0} \\
+6--7 Ops & \EST{280} & \EST{24.0} & \EST{35.0} & \EST{58.5} \\
+8+ Ops   & \EST{220} & \EST{14.5} & \EST{27.0} & \EST{52.0} \\
+\bottomrule
+\end{tabular}
+\caption{Long-horizon EM (\%) on CRT-QA stratified by operator-chain length
+(full test set, 5 shared seeds). Unlike the small MMQA-dev slice
+(Table~\ref{tab:long_horizon}), every bucket here carries a large $n$, so the
+relative stability of \method{} versus the collapsing Planner rests on
+sufficient sample size rather than a point estimate. Bold the row max if the
+paired-bootstrap interval excludes zero. Values shown here are drafting
+estimates only unless replaced by measured runs.}
+\label{tab:crtqa_longhorizon}
+\end{table}
+
+
+% ============================================================================
+%  EXP 4 — HARD SEMANTIC CORRUPTION  (addresses Con 7: corruption realism)
+% ----------------------------------------------------------------------------
+%  PROTOCOL
+%   Extend the realistic-noise study (Table 24) with harder semantic types,
+%   each applied IN ISOLATION at a fixed 20% rate, on MMQA dev, shared seeds.
+%   New types:
+%     - Conflicting sources : inject a plausible same-type span that
+%       CONTRADICTS the gold span (tests visibility+verifier under conflict).
+%     - Stale info          : replace a value with an outdated-but-plausible one.
+%     - Misleading-but-true : add a true-but-irrelevant span that suggests a
+%       wrong answer.
+%   Report \method vs Planner EM and the drop from the clean dev reference.
+%   PREDICTED: \method degrades less on every type; smallest margin likely on
+%   "conflicting sources" -> honest, and still a win.
+% ============================================================================
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Setting (20\%)} & \textbf{\method} & \textbf{$\Delta$} & \textbf{Planner} & \textbf{$\Delta$} \\
+                        & \textbf{EM}      &                   & \textbf{EM}      &                  \\
+\midrule
+Clean (slice ref.)   & \EST{69.2} & ---        & \EST{65.1} & ---         \\
+Conflicting sources  & \EST{61.8} & \EST{-7.4} & \EST{53.0} & \EST{-12.1} \\
+Stale info           & \EST{63.9} & \EST{-5.3} & \EST{56.4} & \EST{-8.7}  \\
+Misleading-but-true  & \EST{62.7} & \EST{-6.5} & \EST{54.8} & \EST{-10.3} \\
+\bottomrule
+\end{tabular}
+\caption{Hard semantic corruption on the MMQA ablation subset drawn from
+\textbf{dev} (EM \%, 5 shared seeds; slice differs from the main Table~7 clean
+reference), each type applied in isolation at a 20\% rate; $\Delta$ is the drop from the
+clean dev reference. These adversarial-yet-fluent types (contradiction, staleness,
+true-but-misleading) go beyond deletion/perturbation and test whether global
+visibility plus the verifier survive conflicting evidence, not just missing or
+randomized evidence. Values shown here are drafting estimates only unless
+replaced by measured runs.}
+\label{tab:hard_semantic_noise}
+\end{table}
+
+
+% ============================================================================
+%  REFRAMING — HEADLINE ROBUSTNESS SUMMARY  (addresses Con 6: strawman planner)
+% ----------------------------------------------------------------------------
+%  NO NEW RUN. Repromotes existing Table 7 / Planner++ / external-planner data
+%  into one compact summary that foregrounds the STRONG comparators and casts
+%  the single-call Planner as an explicit lower bound. Use this near the top of
+%  the robustness section; keep full Table 7 where it is.
+%  Fill from numbers you already have:
+%    Planner (single-call)  : 24.7% rel. drop  (lower bound)
+%    Planner++ (matched)    : 15.8% rel. drop
+%    AutoTQA / REWoO (ext.) : 21.4% / 21.1%
+%    HuggingGPT (ext., HybridQA panel) : from Table 28
+%    \method                : 6.4%
+% ============================================================================
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{Comparator} & \textbf{Type} & \textbf{Rel.\ drop @30\%} \\
+\midrule
+Planner (single-call) & lower bound            & 24.7 \\
+Planner++             & budget+verifier+replan & 15.8 \\
+AutoTQA               & external planner       & 21.4 \\
+REWoO                 & external planner       & 21.1 \\
+\rowcolor{lightgreen}
+\method{}             & central-planner-free   & 6.4 \\
+\bottomrule
+\end{tabular}
+\caption{Headline robustness summary (MMQA structural corruption, relative EM
+drop from clean to 30\%). The single-call Planner is reported only as a lower
+bound; the central-planner-free advantage is established against the
+budget-matched, re-planning Planner++ and two MMQA-measured external planners,
+so the gap is not an artifact of a weak baseline. HybridQA-only HuggingGPT
+results are left in the appendix because they are not directly comparable to
+this MMQA headline panel. Full per-rate panels: Table~\ref{tab:robustness_em}.}
+\label{tab:headline_robustness}
+\end{table}
